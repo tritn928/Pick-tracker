@@ -36,14 +36,22 @@ class RestAdapter:
         full_url = self.url + 'persisted/gw/getEventDetails'
         response = requests.get(url=full_url, headers=headers, params=params)
         data_out = response.json()
-        match_details = Match(match_id, data_out.get('data').get('event').get('match'))
+        match_details = Match(match_id, data_out)
+        return self.update_match(match_details)
+
+    def update_match(self, match_details: Match) -> Match:
+        headers = {'x-api-key': self._api_key}
         game_url = 'https://feed.lolesports.com/livestats/v1/window/'
+
+        # Get current time and convert conform to fit api standard
         currentTime = datetime.now()
         seconds = (currentTime.replace(tzinfo=None) - currentTime.min).seconds
         roundTo = 60
         rounding = (seconds + roundTo / 2) // roundTo * roundTo
         currentTime = currentTime + timedelta(0, rounding - seconds, -currentTime.microsecond)
         params = {'startingTime': currentTime.strftime("%Y-%m-%dT%H:%M:%SZ")}
+
+        # Update match with game details
         for game_id in match_details.game_ids:
             full_url = game_url + game_id
             response = requests.get(url=full_url, headers=headers, params=params)

@@ -42,6 +42,12 @@ class Match:
                     self.name = name
                     self.champion = champion
                     self.role = role
+                    self.gold = 0
+                    self.level = 0
+                    self.kills = 0
+                    self.deaths = 0
+                    self.assists = 0
+                    self.creeps = 0
 
                 def update(self, data: Dict):
                     self.gold = data.get('totalGold')
@@ -74,12 +80,19 @@ class Match:
         def __init__(self, team_one: Team, team_two: Team):
             self.team_one = team_one
             self.team_two = team_two
+            self.teams = []
+            self.teams.append(self.team_one)
+            self.teams.append(self.team_two)
 
     # Constructor for a Match, passed in a match_id and the result of a call to get_match
-    def __init__(self, match_id: str, data: List[Dict] = None ):
+    def __init__(self, match_id: str, data: Dict = None ):
         self.match_id = match_id
         self.games = []
         self.game_ids = []
+        self.team_ids = []
+        data = data.get('data').get('event').get('match')
+        self.team_ids.append(data.get('teams')[0].get('id'))
+        self.team_ids.append(data.get('teams')[1].get('id'))
         # only add games completed or in progress, others have no valid api call
         for game in data.get('games'):
             if game.get('state') == 'completed':
