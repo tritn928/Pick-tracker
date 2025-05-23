@@ -23,31 +23,43 @@ def show_league(id):
 @app.route('/events/<int:id>')
 def show_event(id):
     event = Event.query.get(id)
-    if not event.match:
+    if event.match is None:
+        app.logger.warning("event has no match, getting match")
         cur_match = lolapi.get_match(event.match_id)
-        app.logger.warning('api-call: get_match')
-        event.match = Match(team_one_id=cur_match.team_ids[0], team_two_id=cur_match.team_ids[1])
+        to_add = Match(team_one_id=cur_match.team_ids[0], team_two_id=cur_match.team_ids[1])
+        event.match = to_add
+        db.session.add(to_add)
         teams = lolapi.get_teams([event.match.team_one_id, event.match.team_two_id])
-        app.logger.warning('api-call: get_teams')
-        event.match.teams.append(Team(name=teams[0]['name']))
-        event.match.teams.append(Team(name=teams[1]['name']))
+        team_one = Team(name=teams[0]['name'])
+        team_two = Team(name=teams[1]['name'])
+        event.match.teams.append(team_one)
+        event.match.teams.append(team_two)
+        db.session.add(team_one)
+        db.session.add(team_two)
         for i in range(len(teams)):
             for player in teams[i]['players']:
-                event.match.teams[i].players.append(Player(name=player['summonerName'], role=player['role']))
+                p_to_add = Player(name=player['summonerName'], role=player['role'])
+                event.match.teams[i].players.append(p_to_add)
+                db.session.add(p_to_add)
         for game in cur_match.games:
-            event.match.games.append(Game(test=1))
+            g_to_add = Game(test=1)
+            event.match.games.append(g_to_add)
+            db.session.add(g_to_add)
             for team in game.teams:
-                event.match.games[-1].gameTeams.append(GameTeam(test=2))
+                gT_to_add = GameTeam(test=2)
+                event.match.games[-1].gameTeams.append(gT_to_add)
+                db.session.add(gT_to_add)
                 for player in team.players:
-                    event.match.games[-1].gameTeams[-1].gamePlayers.append(
-                        GamePlayer(name=player.name, role=player.role,
+                    gP_to_add = GamePlayer(name=player.name, role=player.role,
                                     champion=player.champion,
                                     gold=player.gold,
                                     level=player.level,
                                     kills=player.kills,
                                     deaths=player.deaths,
                                     assists=player.assists,
-                                    creeps=player.creeps))
+                                    creeps=player.creeps)
+                    event.match.games[-1].gameTeams[-1].gamePlayers.append(gP_to_add)
+                    db.session.add(gP_to_add)
         db.session.commit()
     teams_to_display = event.match.teams
     games_to_display = event.match.games

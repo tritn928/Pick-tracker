@@ -9,12 +9,11 @@ ignore = ['LCL', 'TFT Esports', 'LCS', "King's Duel", 'Worlds Qualifying Series'
 
 def seed_leagues():
     lolapi = RestAdapter(hostname='esports-api.lolesports.com', api_key='0TvQnueqKa5mxJntVWt0w4LpLfEkrV1Ta8rQBb9Z')
-    app.logger.warning('api-call: get_league')
     leaguesList = lolapi.get_leagues()
     for league in leaguesList:
         if league['name'] in ignore:
-            app.logger.warning('ignoring %s' % league['name'])
             continue
         to_add = League(league_name=league['name'], league_id=league['id'])
         db.session.add(to_add)
     db.session.commit()
+    app.logger.debug("finished seeding leagues")
