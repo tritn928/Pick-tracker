@@ -78,3 +78,10 @@ class RestAdapter:
         if response.status_code != 200 or len(response.data.get('data').get('schedule').get('events')) == 0:
             print("no live events")
         return Schedule('', '', response.data.get('data').get('schedule').get('events'))
+
+    def get_leagues(self) -> List[Dict]:
+        params = {'hl': 'en-US'}
+        response = self.get('persisted/gw/getLeagues', ep_params=params)
+        if response.status_code != 200:
+            print("could not get leagues")
+        return response.data.get('data').get('leagues')
