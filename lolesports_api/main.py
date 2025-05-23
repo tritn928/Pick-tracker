@@ -84,6 +84,7 @@ def print_and_get_player(match: Match, lolapi: RestAdapter) -> Slip.ParlayPlayer
 # Gives the matchup details for a matchLC
 # Gives player details for a team in the match
 def main():
+    return
     lolapi = RestAdapter(hostname='esports-api.lolesports.com', api_key='0TvQnueqKa5mxJntVWt0w4LpLfEkrV1Ta8rQBb9Z')
     leaguesList = get_leagues(lolapi)
     # display info on leagues

@@ -85,3 +85,10 @@ class RestAdapter:
         if response.status_code != 200:
             print("could not get leagues")
         return response.data.get('data').get('leagues')
+
+    def get_teams(self, team_ids:List) -> List[Dict]:
+        params = {'hl': 'en-US', 'id': ",".join(map(str, team_ids))}
+        response = self.get('persisted/gw/getTeams', ep_params=params)
+        if response.status_code != 200:
+            print("could not get teams")
+        return response.data.get('data').get('teams')

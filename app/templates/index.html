@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block head %}
+
+{% endblock %}
+
+{% block body%}
+<div class ="content">
+    <h1>Choose a League</h1>
+    <table>
+        <tr>
+            <th>Name</th>
+            <th>ID</th>
+        </tr>
+        {% for league in leagues %}
+            <tr>
+                <td>{{ league.league_name }}</td>
+                <td>
+                    <a href="/leagues/{{league.id}}">{{league.id}}</a>
+                </td>
+            </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endblock %}

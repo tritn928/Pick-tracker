@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% block head %}
+
+{% endblock %}
+
+{% block body%}
+<div class ="content">
+    {% if event %}
+    <h1>{{ event.team_one }} vs. {{ event.team_two }}</h1>
+    <h1>Players</h1>
+    {% else %}
+    <h1>error?</h1>
+    {% endif %}
+    <table>
+        <caption>{{teams[0].name}}</caption>
+        <tr>
+            <th>Summoner Name</th>
+            <th>Role</th>
+        </tr>
+        {% for player in teams[0].players %}
+            <tr>
+                <th>{{player.name}}</th>
+                <th>{{player.role}}</th>
+            </tr>
+        {% endfor %}
+    </table>
+
+    <table>
+        <caption>{{teams[1].name}}</caption>
+        <tr>
+            <th>Summoner Name</th>
+            <th>Role</th>
+        </tr>
+        {% for player in teams[1].players %}
+            <tr>
+                <th>{{player.name}}</th>
+                <th>{{player.role}}</th>
+            </tr>
+        {% endfor %}
+    </table>
+
+    {% for game in games %}
+        <br>
+        {% for team in game.gameTeams %}
+            <br>
+            <table>
+                <tr>
+                    <th>Name</th>
+                    <th>Role</th>
+                    <th>Champion</th>
+                    <th>Level</th>
+                    <th>Kills</th>
+                    <th>Deaths</th>
+                    <th>Assists</th>
+                    <th>CS</th>
+                    <th>Gold</th>
+                </tr>
+                {% for player in team.gamePlayers %}
+                    <tr>
+                        <th>{{player.name}}</th>
+                        <th>{{player.role}}</th>
+                        <th>{{player.champion}}</th>
+                        <th>{{player.level}}</th>
+                        <th>{{player.kills}}</th>
+                        <th>{{player.deaths}}</th>
+                        <th>{{player.assists}}</th>
+                        <th>{{player.creeps}}</th>
+                        <th>{{player.gold}}</th>
+                    </tr>
+                {% endfor %}
+            </table>
+        {% endfor %}
+    {% endfor %}
+</div>
+{% endblock %}
