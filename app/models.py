@@ -7,9 +7,10 @@ class League(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     league_name = db.Column(db.String(50), nullable=False)
     league_id = db.Column(db.String(50), nullable=False)
+    image = db.Column(db.String(200), nullable=False)
     last_updated = db.Column(db.DateTime, default=datetime.now(timezone.utc), nullable=False)
 
-    events = relationship('Event', back_populates='league')
+    events = relationship('Event', back_populates='league', cascade="all, delete-orphan")
 
 class Event(db.Model):
     __tablename__ = 'events'
@@ -24,7 +25,7 @@ class Event(db.Model):
     last_updated = db.Column(db.DateTime, default=datetime.now(timezone.utc), nullable=False)
 
     league = relationship('League', back_populates='events')
-    match = relationship('Match', back_populates='event', uselist=False)
+    match = relationship('Match', back_populates='event', uselist=False, cascade="all, delete-orphan")
 
 class Match(db.Model):
     __tablename__ = 'matches'
@@ -35,8 +36,8 @@ class Match(db.Model):
     team_two_id = db.Column(db.String(50), nullable=False)
 
     event = relationship('Event', foreign_keys=[event_id], back_populates='match', uselist=False)
-    teams = relationship('Team', back_populates='match')
-    games = relationship('Game', back_populates='match')
+    teams = relationship('Team', back_populates='match', cascade="all, delete-orphan")
+    games = relationship('Game', back_populates='match', cascade="all, delete-orphan")
 
 class Team(db.Model):
     __tablename__ = 'teams'
@@ -44,9 +45,10 @@ class Team(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     match_id = db.Column(db.Integer, db.ForeignKey('matches.id'), nullable=False)
     name = db.Column(db.String(50), nullable=False)
+    image = db.Column(db.String(200), nullable=False)
 
     match = relationship('Match', back_populates='teams')
-    players = relationship('Player', back_populates='team')
+    players = relationship('Player', back_populates='team', cascade="all, delete-orphan")
 
 class Player(db.Model):
     __tablename__ = 'players'
@@ -63,20 +65,21 @@ class Game(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     match_id = db.Column(db.Integer, db.ForeignKey('matches.id'), nullable=False)
-    test = db.Column(db.Integer, nullable=False)
+    game_id = db.Column(db.String(50), nullable=False)
 
     match = relationship('Match', back_populates='games')
-    gameTeams = relationship('GameTeam', back_populates='game')
+    gameTeams = relationship('GameTeam', back_populates='game', cascade="all, delete-orphan")
 
 class GameTeam(db.Model):
     __tablename__ = 'gameteams'
 
     id = db.Column(db.Integer, primary_key=True)
     game_id = db.Column(db.Integer, db.ForeignKey('games.id'), nullable=False)
-    test = db.Column(db.Integer, nullable=False)
+    team_id = db.Column(db.String(50))
+    team_name = db.Column(db.String(50))
 
     game = relationship('Game', back_populates='gameTeams')
-    gamePlayers = relationship('GamePlayer', back_populates='gameTeam')
+    gamePlayers = relationship('GamePlayer', back_populates='gameTeam', cascade="all, delete-orphan")
 
 class GamePlayer(db.Model):
     __tablename__ = 'gameplayers'

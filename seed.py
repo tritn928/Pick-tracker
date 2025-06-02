@@ -13,7 +13,7 @@ def seed_leagues():
     for league in leaguesList:
         if league['name'] in ignore:
             continue
-        to_add = League(league_name=league['name'], league_id=league['id'])
+        to_add = League(league_name=league['name'], league_id=league['id'], image=league['image'])
         db.session.add(to_add)
     db.session.commit()
     app.logger.debug("finished seeding leagues")

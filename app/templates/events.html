@@ -1,30 +1,150 @@
-{% extends 'base.html' %}
-{% block head %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ league.name }} Events</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1e293b; /* bg-slate-900 */
+            color: #d1d5db; /* text-gray-300 */
+        }
+        .event-card {
+            background-color: #334155; /* bg-slate-700 */
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+        }
+        .event-card a {
+            text-decoration: none;
+            color: inherit;
+            display: block; /* Make the whole card clickable */
+        }
+        .team-name {
+            font-weight: bold;
+            color: #f9fafb; /* text-gray-100 */
+        }
+        .event-meta {
+            color: #9ca3af; /* text-gray-400 */
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4">
+    <div class="max-w-4xl mx-auto py-8">
+        <div class="mb-6">
+            <a href="/index" class="text-blue-400 hover:underline">Back to Leagues</a>
+            <h1 class="text-3xl font-extrabold text-white mt-2">{{ league.name }} Schedule</h1>
+        </div>
 
-{% endblock %}
+        <div>
+            <h2 class="text-xl font-semibold text-gray-300 mb-4">Events In Progress</h2>
+            <div class="space-y-4">
+                {% if inProgress_events %}
+                    {% for event in inProgress_events %}
+                        <div class="event-card p-4">
+                            <a href="/events/{{event.id}}">
+                                <p class="event-meta mb-1">{{ event.start_time }}</p>
+                                <div class="grid grid-cols-[1fr_auto_1fr] items-center">
+                                    <div class="text-left">
+                                        <span class="team-name">{{ event.team_one }}</span>
+                                    </div>
+                                    <div class="flex items-center justify-center">
+                                        {% if event.match.teams %}
+                                            <img src="{{ event.match.teams[0].image }}" alt="{{ event.team_one }} Logo" class="h-6 w-auto mr-2">
+                                            <span>vs</span>
+                                            <img src="{{ event.match.teams[1].image }}" alt="{{ event.team_two }} Logo" class="h-6 w-auto ml-2">
+                                        {% else %}
+                                            <span>vs</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="text-right">
+                                        <span class="team-name">{{ event.team_two }}</span>
+                                    </div>
+                                </div>
+                                {# You might want to add more details here #}
+                            </a>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-gray-500">No events in progress for this league.</p>
+                {% endif %}
+            </div>
+        </div>
 
-{% block body%}
-<div class ="content">
-    <h1>Matches</h1>
-    <table>
-        <tr>
-            <th>Start Time</th>
-            <th>Team 1</th>
-            <th>Team 2</th>
-            <th>Best of</th>
-            <th>State</th>
-            <th>ID</th>
-        </tr>
-        {% for event in events %}
-            <tr>
-                <td>{{ event.start_time }}</td>
-                <td>{{ event.team_one }}</td>
-                <td>{{ event.team_two }}</td>
-                <td>{{ event.strategy }}</td>
-                <td>{{ event.state    }}</td>
-                <td><a href="/events/{{event.id}}">{{event.id}}</a></td>
-            </tr>
-        {% endfor %}
-    </table>
-</div>
-{% endblock %}
+        <div>
+            <h2 class="text-xl font-semibold text-gray-300 mb-4">Upcoming Events</h2>
+            <div class="space-y-4">
+                {% if unstarted_events %}
+                    {% for event in unstarted_events %}
+                        <div class="event-card p-4">
+                            <a href="/events/{{event.id}}">
+                                <p class="event-meta mb-1">{{ event.start_time }}</p>
+                                <div class="grid grid-cols-[1fr_auto_1fr] items-center">
+                                    <div class="text-left">
+                                        <span class="team-name">{{ event.team_one }}</span>
+                                    </div>
+                                    <div class="flex items-center justify-center">
+                                        {% if event.match.teams %}
+                                            <img src="{{ event.match.teams[0].image }}" alt="{{ event.team_one }} Logo" class="h-6 w-auto mr-2">
+                                            <span>vs</span>
+                                            <img src="{{ event.match.teams[1].image }}" alt="{{ event.team_two }} Logo" class="h-6 w-auto ml-2">
+                                        {% else %}
+                                            <span>vs</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="text-right">
+                                        <span class="team-name">{{ event.team_two }}</span>
+                                    </div>
+                                </div>
+                                {# You might want to add more details here #}
+                            </a>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-gray-500">No upcoming events for this league.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="mt-8">
+            <h2 class="text-xl font-semibold text-gray-300 mb-4">Completed Events</h2>
+            <div class="space-y-4">
+                {% if completed_events %}
+                    {% for event in completed_events %}
+                        <div class="event-card p-4">
+                            <a href="/events/{{event.id}}">
+                                <p class="event-meta mb-1">{{ event.start_time }}</p>
+                                <div class="grid grid-cols-[1fr_auto_1fr] items-center">
+                                    <div class="text-left">
+                                        <span class="team-name">{{ event.team_one }}</span>
+                                    </div>
+                                    <div class="flex items-center justify-center">
+                                        {% if event.match.teams %}
+                                            <img src="{{ event.match.teams[0].image }}" alt="{{ event.team_one }} Logo" class="h-6 w-auto mr-2">
+                                            <span>vs</span>
+                                            <img src="{{ event.match.teams[1].image }}" alt="{{ event.team_two }} Logo" class="h-6 w-auto ml-2">
+                                        {% else %}
+                                            <span>vs</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="text-right">
+                                        <span class="team-name">{{ event.team_two }}</span>
+                                    </div>
+                                </div>
+                                {% if event.result %}
+                                    <p class="text-gray-400 text-sm mt-1">Result: {{ event.result }}</p>
+                                {% endif %}
+                                {# Add more details like scores if available #}
+                            </a>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-gray-500">No completed events for this league.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</body>
+</html>
