@@ -51,10 +51,10 @@
                                         <span class="team-name">{{ event.team_one }}</span>
                                     </div>
                                     <div class="flex items-center justify-center">
-                                        {% if event.match.teams %}
-                                            <img src="{{ event.match.teams[0].image }}" alt="{{ event.team_one }} Logo" class="h-6 w-auto mr-2">
+                                        {% if event.match.match_teams %}
+                                            <img src="{{ event.match.match_teams[0].image }}" alt="{{ event.team_one }} Logo" class="h-6 w-auto mr-2">
                                             <span>vs</span>
-                                            <img src="{{ event.match.teams[1].image }}" alt="{{ event.team_two }} Logo" class="h-6 w-auto ml-2">
+                                            <img src="{{ event.match.match_teams[1].image }}" alt="{{ event.team_two }} Logo" class="h-6 w-auto ml-2">
                                         {% else %}
                                             <span>vs</span>
                                         {% endif %}
@@ -86,10 +86,10 @@
                                         <span class="team-name">{{ event.team_one }}</span>
                                     </div>
                                     <div class="flex items-center justify-center">
-                                        {% if event.match.teams %}
-                                            <img src="{{ event.match.teams[0].image }}" alt="{{ event.team_one }} Logo" class="h-6 w-auto mr-2">
+                                        {% if event.match.match_teams %}
+                                            <img src="{{ event.match.match_teams[0].image }}" alt="{{ event.team_one }} Logo" class="h-6 w-auto mr-2">
                                             <span>vs</span>
-                                            <img src="{{ event.match.teams[1].image }}" alt="{{ event.team_two }} Logo" class="h-6 w-auto ml-2">
+                                            <img src="{{ event.match.match_teams[1].image }}" alt="{{ event.team_two }} Logo" class="h-6 w-auto ml-2">
                                         {% else %}
                                             <span>vs</span>
                                         {% endif %}
@@ -121,10 +121,10 @@
                                         <span class="team-name">{{ event.team_one }}</span>
                                     </div>
                                     <div class="flex items-center justify-center">
-                                        {% if event.match.teams %}
-                                            <img src="{{ event.match.teams[0].image }}" alt="{{ event.team_one }} Logo" class="h-6 w-auto mr-2">
+                                        {% if event.match.match_teams %}
+                                            <img src="{{ event.match.match_teams[0].image }}" alt="{{ event.team_one }} Logo" class="h-6 w-auto mr-2">
                                             <span>vs</span>
-                                            <img src="{{ event.match.teams[1].image }}" alt="{{ event.team_two }} Logo" class="h-6 w-auto ml-2">
+                                            <img src="{{ event.match.match_teams[1].image }}" alt="{{ event.team_two }} Logo" class="h-6 w-auto ml-2">
                                         {% else %}
                                             <span>vs</span>
                                         {% endif %}

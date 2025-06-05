@@ -1,10 +1,12 @@
 from app import app
 from app import db
-from seed import seed_leagues
+from seed import *
 from app.scheduler import scheduler
 import atexit
+import logging
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
+app.logger.setLevel(logging.WARNING)
 
 def delete_alembic_version():
     try:
@@ -19,6 +21,8 @@ with app.app_context():
     #db.drop_all()
     #db.create_all()
     #seed_leagues()
-    scheduler.start()
+    #seed_events()
+    #seed_matches()
+    #scheduler.start()
     app.run(debug=True, use_reloader=False)
     atexit.register(lambda: scheduler.shutdown(wait=False))

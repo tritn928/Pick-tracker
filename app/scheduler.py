@@ -4,7 +4,7 @@ from flask import Flask
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timezone, timedelta
 from lolesports_api.rest_adapter import RestAdapter
-from app.models import League, Event, Match, Team, Player, Game, GameTeam, GamePlayer
+from app.models import *
 from apscheduler.executors.pool import ThreadPoolExecutor
 import time
 from pytz import timezone as tz
@@ -21,7 +21,7 @@ def update_leagues():
     with app.app_context():
         all_leagues = League.query.all()
         for league in all_leagues:
-            eventSchedule = lolapi.get_schedule(league.league_name, league.league_id)
+            eventSchedule = lolapi.get_schedule(league.name, league.league_id)
             for event in eventSchedule.events:
                 target = db.session.query(Event).filter_by(match_id=event.match_id).first()
                 if target is None:
@@ -35,12 +35,12 @@ def update_leagues():
 # Don't know if this is faster or not
 def do_half():
     for i in range(1, 10):
-        scheduler.add_job(update_league, 'interval', minutes=10, next_run_time=datetime.now(), args=[i])
+        update_league(i)
         time.sleep(20)
 
 def do_rest():
     for i in range(10, 34):
-        scheduler.add_job(update_league, 'interval', minutes=10, next_run_time=datetime.now(), args=[i])
+        update_league(i)
         time.sleep(20)
 
 # Updates all events for one league.
@@ -58,19 +58,20 @@ def update_league(id:int):
 def update_match(event: Event):
     cur_match = lolapi.get_match(event.match_id)
     if event.match is None or not event.match.teams or event.match.teams[0].name == 'TBD' or event.match.teams[1].name == 'TBD':
+        #TODO: update everything properly instead of deleting and recreating
         if event.match:
             db.session.delete(event.match)
         db.session.commit()
         to_add = Match(team_one_id=cur_match.team_ids[0], team_two_id=cur_match.team_ids[1])
         event.match = to_add
         db.session.add(to_add)
-        if event.match.teams:
-            for old_team in list(event.match.teams):
+        if event.match.match_teams:
+            for old_team in list(event.match.match_teams):
                 db.session.delete(old_team)
             db.session.commit()
         teams = lolapi.get_teams([event.match.team_one_id, event.match.team_two_id])
-        team_one = Team(name=teams[0]['name'], image=teams[0]['image'])
-        team_two = Team(name=teams[1]['name'], image=teams[1]['image'])
+        team_one = MatchTeam(name=teams[0]['name'], image=teams[0]['image'])
+        team_two = MatchTeam(name=teams[1]['name'], image=teams[1]['image'])
         event.match.teams.append(team_one)
         event.match.teams.append(team_two)
         event.team_one = team_one.name
@@ -79,7 +80,7 @@ def update_match(event: Event):
         db.session.add(team_two)
         for i in range(len(teams)):
             for player in teams[i]['players']:
-                p_to_add = Player(team_id=event.match.teams[i].id, name=player['summonerName'], role=player['role'])
+                p_to_add = MatchPlayer(team_id=event.match.teams[i].id, name=player['summonerName'], role=player['role'])
                 event.match.teams[i].players.append(p_to_add)
                 db.session.add(p_to_add)
     if not event.match.games:
@@ -99,7 +100,7 @@ def update_match(event: Event):
                 event.match.games[-1].gameTeams.append(gT_to_add)
                 db.session.add(gT_to_add)
                 for player in team.players:
-                    gP_to_add = GamePlayer(name=player.name, role=player.role,
+                    gP_to_add = GamePlayerPerformance(name=player.name, role=player.role,
                                             champion=player.champion,
                                             gold=player.gold,
                                             level=player.level,
@@ -140,7 +141,7 @@ def update_match(event: Event):
                 event.match.games[-1].gameTeams.append(gT_to_add)
                 db.session.add(gT_to_add)
                 for player in team.players:
-                    gP_to_add = GamePlayer(name=player.name, role=player.role,
+                    gP_to_add = GamePlayerPerformance(name=player.name, role=player.role,
                                            champion=player.champion,
                                            gold=player.gold,
                                            level=player.level,
@@ -175,6 +176,7 @@ def update_match(event: Event):
 # Schedules an update match job for their start time
 def update_unstarted():
     current_time = datetime.now(timezone.utc)
+    threshold = timedelta(seconds=10)
     with app.app_context():
         unstarted_events = Event.query.filter_by(state='unstarted').all()
         for unstarted_event in unstarted_events:
@@ -182,13 +184,26 @@ def update_unstarted():
             start_time = datetime.strptime(start_time, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
             if current_time > start_time:
                 app.logger.warning("Event %d in League %d has passed starting time %s, updating" % (unstarted_event.id, unstarted_event.league.id, start_time))
-                unstarted_event.state = 'inProgress'
                 unstarted_event.last_updated = current_time
                 update_match(unstarted_event)
             else:
                 app.logger.warning("Event %d in League %d has not started, not updating until %s" % (unstarted_event.id,
                                     unstarted_event.league.id, start_time))
                 scheduler.add_job(update_match, trigger='date', run_date=start_time, args=[unstarted_event])
+        app.logger.warning("finished updating matches unstarted")
+
+def f_update_unstarted():
+    current_time = datetime.now(timezone.utc)
+    threshold = timedelta(minutes=5)
+    with app.app_context():
+        unstarted_events = Event.query.filter_by(state='unstarted').all()
+        for unstarted_event in unstarted_events:
+            start_time = unstarted_event.start_time
+            start_time = datetime.strptime(start_time, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            if (current_time - unstarted_event.last_updated.replace(tzinfo=timezone.utc)) > threshold:
+                app.logger.warning("Event %d in League %d has passed threshold %s, updating" % (unstarted_event.id, unstarted_event.league.id, start_time))
+                unstarted_event.last_updated = current_time
+                update_match(unstarted_event)
         app.logger.warning("finished updating matches unstarted")
 
 # Handles updating events in progress
@@ -210,9 +225,10 @@ def print_jobs():
     for job in all_jobs:
         print(f"Last Job ID: {job.id} | Function: {job.func} | Next Run Time: {job.next_run_time}")
 
-scheduler.add_job(update_leagues, 'interval', minutes=40, next_run_time=datetime.now())
+#scheduler.add_job(update_leagues, 'interval', minutes=40, next_run_time=datetime.now())
 scheduler.add_job(update_unstarted, trigger='date', run_date=datetime.now())
 scheduler.add_job(update_in_progress, 'interval', minutes=1, next_run_time=datetime.now())
-scheduler.add_job(do_half, trigger='interval', minutes=45, next_run_time=datetime.now() + timedelta(minutes=1))
-scheduler.add_job(do_rest, trigger='interval', minutes=45, next_run_time=datetime.now() + timedelta(minutes=2))
+#scheduler.add_job(do_half, trigger='interval', minutes=45, next_run_time=datetime.now() + timedelta(minutes=1))
+#scheduler.add_job(do_rest, trigger='interval', minutes=45, next_run_time=datetime.now() + timedelta(minutes=2))
 scheduler.add_job(print_jobs, 'interval', minutes=3, next_run_time=datetime.now() + timedelta(minutes=1))
+scheduler.add_job(f_update_unstarted, trigger='interval', minutes=5, next_run_time=datetime.now() + timedelta(minutes=1))

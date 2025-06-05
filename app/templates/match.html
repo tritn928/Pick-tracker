@@ -72,7 +72,7 @@
                     </div>
                 </div>
                 <ul>
-                    {% for player in teams[0].players %}
+                    {% for player in teams[0].match_players %}
                         <li class="grid grid-cols-1 gap-y-1">
                             <div class="text-left">
                                 <span class="player-name">{{ player.name }}</span>
@@ -179,7 +179,7 @@
                     </div>
                 </div>
                 <ul class="text-right">
-                    {% for player in teams[1].players %}
+                    {% for player in teams[1].match_players %}
                         <li class="grid grid-cols-1 gap-y-1">
                             <div class="text-right">
                                 <span class="player-name">{{ player.name }}</span>

@@ -31,7 +31,7 @@
                 {% for league in leagues %}
                     <a href="/leagues/{{league.id}}" class="bg-slate-800 hover:bg-slate-700 text-white rounded-lg shadow-md p-6 flex flex-col items-center justify-center transition duration-300 ease-in-out transform hover:-translate-y-1">
                         <img src="{{ league.image }}" alt="{{ league.name }} Logo" width="50" height="50" class="mb-4">
-                        <h2 class="text-2xl font-semibold mb-2 text-center">{{ league.league_name }}</h2>
+                        <h2 class="text-2xl font-semibold mb-2 text-center">{{ league.name }}</h2>
                     </a>
                 {% endfor %}
             {% else %}

@@ -1,6 +1,6 @@
 from flask import render_template
 from lolesports_api.rest_adapter import RestAdapter
-from app.models import League, Event, Match, Team, Player, Game, GameTeam, GamePlayer
+from app.models import *
 from app import db
 from app import app
 from app.scheduler import scheduler, update_match
@@ -30,6 +30,6 @@ def show_event(id):
     if event.match is None:
         app.logger.warning("event has no match, getting match")
         update_match(event)
-    teams_to_display = event.match.teams
+    teams_to_display = event.match.match_teams
     games_to_display = event.match.games
     return  render_template('match.html', games=games_to_display, teams=teams_to_display, event=event)
