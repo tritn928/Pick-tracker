@@ -125,6 +125,13 @@ def seed_matches():
         # Gets the teams involved in the match
         for api_team_data in api_teams_in_match:
             if api_team_data['name'] == 'TBD':
+                # Make a temporary match_team
+                match_team = MatchTeam(
+                    name='TBD',
+                    image=None,
+                )
+                match_team.match = new_match
+                db.session.add(match_team)
                 continue
             # Get Canonical Team
             canonical_team = get_or_create_canonical_team(api_team_data, event.league)
@@ -226,6 +233,7 @@ def seed_matches():
                                     f"Could not find MatchTeam for substitute player {canonical_player_for_stats.name} (associated with CTeam {canonical_team_for_game.name}) in Match for Event PK {event.id}. Skipping GPP.")
                                 continue
 
+                        db.session.flush()
                         # Add a player's stats for a game and pair it to the MatchPlayer and CanonicalPlayer
                         gpp = GamePlayerPerformance(
                             name=canonical_player_for_stats.name,
@@ -239,7 +247,6 @@ def seed_matches():
                             creeps=api_player_stats.creeps,
                             canonical_player_id=canonical_player_for_stats.id,
                             match_player_id=match_player_for_stats.id
-
                         )
                         match_player = match_player_for_stats if match_player_for_stats else None
                         if hasattr(game_team, 'gamePlayers'): game_team.gamePlayers.append(gpp)

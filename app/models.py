@@ -46,7 +46,7 @@ class MatchTeam(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     match_id = db.Column(db.Integer, db.ForeignKey('matches.id'), nullable=False)
-    canonical_team_id = db.Column(db.Integer, db.ForeignKey('canonical_teams.id'), nullable=False)
+    canonical_team_id = db.Column(db.Integer, db.ForeignKey('canonical_teams.id'))
     name = db.Column(db.String(50), nullable=False)
     image = db.Column(db.String(200))
     # could include side, score_for_match, result_for_match, etc.

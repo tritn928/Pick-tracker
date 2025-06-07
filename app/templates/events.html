@@ -86,7 +86,7 @@
                                         <span class="team-name">{{ event.team_one }}</span>
                                     </div>
                                     <div class="flex items-center justify-center">
-                                        {% if event.match.match_teams %}
+                                        {% if event.match.match_teams and event.match.match_teams|length == 2%}
                                             <img src="{{ event.match.match_teams[0].image }}" alt="{{ event.team_one }} Logo" class="h-6 w-auto mr-2">
                                             <span>vs</span>
                                             <img src="{{ event.match.match_teams[1].image }}" alt="{{ event.team_two }} Logo" class="h-6 w-auto ml-2">

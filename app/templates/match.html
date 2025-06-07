@@ -3,7 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% if teams|length == 2%}
     <title>Match Details: {{ teams[0].name }} vs {{ teams[1].name }}</title>
+    {% else %}
+    <title>Upcoming Match</title>
+    {% endif %}
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {

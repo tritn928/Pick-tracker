@@ -30,12 +30,12 @@ class RestAdapter:
     # Wrapper around the getEventDetails and live window calls
     # Given a match_id, creates a Match object
     # Retrieves the appropriate game_ids for the match and updates the Match object with live or completed stats
-    def get_match(self, match_id: str) -> Match:
+    def get_match(self, match_id: str) -> Match | None:
         params = {'hl': 'en-US', 'id': match_id}
         response = self.get('persisted/gw/getEventDetails', ep_params=params)
         if response.status_code != 200 or response.data.get('data').get('event') is None:
             print("Could not find match")
-            exit(1)
+            return None
         match_details = Match(match_id, response.data)
         return self.update_match(match_details)
 
