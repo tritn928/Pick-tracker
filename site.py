@@ -20,6 +20,7 @@ def delete_alembic_version():
         print(f"An error occurred: {e}")
 
 with app.app_context():
+    # Will make seeding script separate
     #db.drop_all()
     #db.create_all()
     #seed_leagues()
@@ -30,4 +31,5 @@ with app.app_context():
     scheduler.start()
     schedule_initial_jobs(app)
     app.run(debug=True, use_reloader=False)
+    scheduler.remove_all_jobs()
     atexit.register(lambda: scheduler.shutdown(wait=False))

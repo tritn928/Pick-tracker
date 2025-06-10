@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="bg-slate-700/50 shadow-xl rounded-xl p-8 max-w-6xl w-full mx-auto">
+    <h1 class="text-4xl font-extrabold text-white mb-8 text-center">
+        League of Legends
+    </h1>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% if leagues %}
+            {% for league in leagues %}
+                <a href="/leagues/{{league.id}}" class="bg-slate-800 hover:bg-slate-700 text-white rounded-lg shadow-md p-6 flex flex-col items-center justify-center transition duration-300 ease-in-out transform hover:-translate-y-1">
+                    <img src="{{ league.image }}" alt="{{ league.name }} Logo" width="50" height="50" class="mb-4 object-contain">
+                    <h2 class="text-2xl font-semibold mb-2 text-center">{{ league.name }}</h2>
+                </a>
+            {% endfor %}
+        {% else %}
+            <p class="col-span-full text-center text-gray-400 text-lg">No leagues available at the moment. Please check back later!</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

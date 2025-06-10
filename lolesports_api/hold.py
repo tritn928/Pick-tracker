@@ -28,7 +28,7 @@ def index():
             return 'There was an issue adding your task'
     else:
         tasks = Todo.query.order_by(Todo.date_created).all()
-        return render_template('index.html', tasks=tasks)
+        return render_template('leagues.html', tasks=tasks)
 
 @app.route('/delete/<int:id>')
 def delete(id):

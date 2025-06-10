@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="flex items-center justify-center min-h-screen">
+    <div class="w-full max-w-md">
+        <div class="bg-white dark:bg-slate-800 shadow-lg rounded-xl px-8 pt-6 pb-8 mb-4">
+            <h1 class="text-3xl font-bold text-center text-slate-700 dark:text-slate-200 mb-6">{{ title }}</h1>
+            <form action="" method="post" novalidate>
+                {{ form.hidden_tag() }}
+                <div class="mb-4">
+                    {{ form.username.label(class="block text-slate-600 dark:text-slate-300 text-sm font-bold mb-2") }}
+                    {{ form.username(class="shadow-sm appearance-none border rounded w-full py-2 px-3 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent", size=32) }}
+                    {% for error in form.username.errors %}
+                    <p class="text-red-500 text-xs italic mt-2">{{ error }}</p>
+                    {% endfor %}
+                </div>
+                <div class="mb-4">
+                    {{ form.email.label(class="block text-slate-600 dark:text-slate-300 text-sm font-bold mb-2") }}
+                    {{ form.email(class="shadow-sm appearance-none border rounded w-full py-2 px-3 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent", size=64) }}
+                    {% for error in form.email.errors %}
+                    <p class="text-red-500 text-xs italic mt-2">{{ error }}</p>
+                    {% endfor %}
+                </div>
+                <div class="mb-4">
+                    {{ form.password.label(class="block text-slate-600 dark:text-slate-300 text-sm font-bold mb-2") }}
+                    {{ form.password(class="shadow-sm appearance-none border rounded w-full py-2 px-3 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent", size=32) }}
+                    {% for error in form.password.errors %}
+                    <p class="text-red-500 text-xs italic mt-2">{{ error }}</p>
+                    {% endfor %}
+                </div>
+                <div class="mb-6">
+                    {{ form.password2.label(class="block text-slate-600 dark:text-slate-300 text-sm font-bold mb-2") }}
+                    {{ form.password2(class="shadow-sm appearance-none border rounded w-full py-2 px-3 text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent", size=32) }}
+                    {% for error in form.password2.errors %}
+                    <p class="text-red-500 text-xs italic mt-2">{{ error }}</p>
+                    {% endfor %}
+                </div>
+                <div class="flex items-center justify-center">
+                    {{ form.submit(class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-150 ease-in-out") }}
+                </div>
+            </form>
+            <p class="text-center text-slate-500 text-sm mt-6">
+                Already have an account?
+                <a href="{{ url_for('login') }}" class="font-bold text-blue-500 hover:text-blue-700">
+                    Sign In
+                </a>
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

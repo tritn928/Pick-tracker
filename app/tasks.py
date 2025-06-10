@@ -1,4 +1,4 @@
-from app import app, db
+from app import app, db, cache
 from app.models import *
 from lolesports_api.rest_adapter import RestAdapter
 from app.scheduler import scheduler
@@ -324,55 +324,95 @@ def populate_completed_events():
                             if match_player_for_stats and hasattr(match_player_for_stats, 'game_stats'):
                                 match_player_for_stats.game_stats.append(gpp)
                             db.session.add(gpp)
+            # Loop through all match_players, if they do not have game_stats, remove them
+            to_remove = []
+            for m_team in event.match.match_teams:
+                for m_player in m_team.match_players:
+                    if m_player.game_stats is None:
+                        to_remove.append(m_player)
+            db.session.delete(to_remove)
             db.session.commit()
         app.logger.info("Finished processing all new completed events")
 
-# Loops through all unstarted games, looking to update either their TBD teams
-# or check for when the game starts
-def update_unstarted_events():
+# Updates TBD teams and then schedules live tracking for events that are about to start.
+def process_unstarted_events():
     with app.app_context():
-        current_time = datetime.now(timezone.utc)
-        app.logger.info("SCHEDULER: Running job to update unstarted events. Time: " + str(current_time))
-        tbd_events = Event.query.filter(or_(Event.team_one == "TBD", Event.team_two == "TBD")).all()
-        for event in tbd_events:
-            update_TBD_event(event.id)
+        now = datetime.now(timezone.utc)
+        app.logger.info(f"SCHEDULER: Running job to process unstarted events at {now.isoformat()}")
+
+        unstarted_events = Event.query.filter_by(state='unstarted').all()
+
+        # Update events with TBD teams
+        tbd_events = [e for e in unstarted_events if e.team_one == 'TBD' or e.team_two == 'TBD']
+        if tbd_events:
+            app.logger.info(f"Found {len(tbd_events)} unstarted events with TBD teams to update.")
+            for event in tbd_events:
+                try:
+                    update_TBD_event(event.id)
+                except Exception as e:
+                    app.logger.error(f"Error updating TBD for Event {event.id}: {e}")
+                    db.session.rollback()
             db.session.commit()
-        active_events = Event.query.filter(or_(Event.state == 'unstarted', Event.state == 'inProgress')).all()
-        for event in active_events:
-            start_time = datetime.strptime(event.start_time, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-            # If the event will start in the next 5 minutes
-            if (current_time - start_time) > timedelta(minutes=5):
-                # Check if a job already exists
-                job_id = f"track_unstarted_event_{event.match_id}"
+
+        events_to_check = [e for e in unstarted_events if e.team_one != 'TBD' and e.team_two != 'TBD']
+
+        for event in events_to_check:
+            if not event.start_time_datetime:
+                try:
+                    event.start_time_datetime = datetime.strptime(event.start_time, "%Y-%m-%dT%H:%M:%SZ").replace(
+                        tzinfo=timezone.utc)
+                except (ValueError, TypeError):
+                    app.logger.warning(f"Could not parse start_time for Event {event.id}. Skipping start check.")
+                    continue
+
+            start_time = event.start_time_datetime.replace(tzinfo=timezone.utc)
+            if (now - start_time) > timedelta(minutes=5):
+                job_id = f"start_tracking_match_{event.match_id}"
                 if not scheduler.get_job(job_id):
                     app.logger.info(
-                        f"SCHEDULER: Found an unstarted event, {event.match_id}, scheduled a job for {str(start_time)}")
+                        f"SCHEDULER: Event {event.match_id} is starting soon. Scheduling job to run at {start_time.isoformat()}")
                     scheduler.add_job(
                         id=job_id,
-                        func=track_unstarted_event,
+                        func='app.tasks:track_unstarted_event',
                         trigger='date',
                         run_date=start_time,
                         args=[event.id],
                         misfire_grace_time=None
                     )
-                    time.sleep(5)
-        app.logger.info("SCHEDULER: Finished updating unstarted events")
 
-# Kicks off tracking a game that started
+        app.logger.info("SCHEDULER: Finished processing unstarted events.")
+
+# updates the event state and schedules the recurring "in-progress" job
 def track_unstarted_event(event_id):
     with app.app_context():
-        event = Event.query.filter_by(id=event_id).first()
-        app.logger.info(f"Match {event.match_id} is starting, updating to inProgress")
+        event = Event.query.get(event_id)
+        if not event:
+            app.logger.error(f"SCHEDULER: Can't track event, Event ID {event_id} not found.")
+            return
+
+        app.logger.info(f"Match {event.match_id} is starting. Updating state to inProgress.")
         event.state = 'inProgress'
         db.session.commit()
+
         job_id = f"update_in_progress_match_{event.match_id}"
         if not scheduler.get_job(job_id):
             scheduler.add_job(
                 id=job_id,
-                func=update_in_progress_match,
+                func='app.tasks:update_in_progress_match',
                 trigger='interval',
-                seconds=20,  # Run every 20 seconds
+                seconds=20,
                 args=[event.id],
+                misfire_grace_time=None
+            )
+
+        job_id = f"update_invalidate_caches_for_live_games"
+        if not scheduler.get_job(job_id):
+            scheduler.add_job(
+                id=job_id,
+                func=invalidate_caches_for_live_games,
+                trigger='interval',
+                minutes=1,
+                replace_existing=True,
                 misfire_grace_time = None
             )
 
@@ -505,3 +545,89 @@ def update_in_progress_match(event_id):
 def print_jobs():
     for job in scheduler.get_jobs():
         app.logger.info(f"SCHEDULED JOB - ID:{job.id}")
+
+# Finds and deletes MatchPlayer records that have no associated game statistics
+# Only cleans up completed events
+def cleanup_unused_match_players():
+    with app.app_context():
+        app.logger.info("Starting cleanup job for unused MatchPlayer records...")
+
+        # Query all players that have some stats
+        players_with_stats_query = db.session.query(GamePlayerPerformance.match_player_id).distinct()
+        players_with_stats_ids = {row.match_player_id for row in players_with_stats_query}
+        app.logger.info(f"Found {len(players_with_stats_ids)} MatchPlayers that have game stats.")
+
+        # Query all players that are in a completed event
+        all_players_in_completed_matches_query = db.session.query(MatchPlayer.id).join(
+            MatchPlayer.match_team
+        ).join(
+            MatchTeam.match
+        ).join(
+            Match.event
+        ).filter(
+            Event.state == 'completed'
+        )
+        all_players_in_completed_matches_ids = {row.id for row in all_players_in_completed_matches_query}
+        app.logger.info(f"Found {len(all_players_in_completed_matches_ids)} total MatchPlayer IDs in completed events.")
+
+        ids_to_delete = all_players_in_completed_matches_ids - players_with_stats_ids
+
+        if not ids_to_delete:
+            app.logger.info("No unused MatchPlayer records found to delete. Cleanup complete.")
+            return
+
+        app.logger.warning(f"Identified {len(ids_to_delete)} unused MatchPlayer records to delete.")
+
+        try:
+            delete_query = db.session.query(MatchPlayer).filter(MatchPlayer.id.in_(ids_to_delete))
+            deleted_count = delete_query.delete(synchronize_session=False)
+            db.session.commit()
+            app.logger.info(f"Successfully bulk deleted {deleted_count} unused MatchPlayer records.")
+        except Exception as e:
+            db.session.rollback()
+            app.logger.error(f"An error occurred during MatchPlayer bulk cleanup: {e}", exc_info=True)
+
+# Finds all users tracking any live game and clear their dashboard cache
+def invalidate_caches_for_live_games():
+    with app.app_context():
+        app.logger.info("SCHEDULER: Running job to invalidate caches for live games.")
+
+        # Query all events in progress
+        live_event_ids_query = db.session.query(Event.id).filter(Event.state == 'inProgress')
+        live_event_ids = {row.id for row in live_event_ids_query}
+
+        if not live_event_ids:
+            app.logger.info("SCHEDULER: No live games found. No caches to invalidate.")
+            return
+
+        # Query all users that are tracking the team
+        users_tracking_live_teams_query = db.session.query(user_tracked_teams.c.user_id).join(
+            MatchTeam, user_tracked_teams.c.canonical_team_id == MatchTeam.canonical_team_id
+        ).join(
+            Match, MatchTeam.match_id == Match.id
+        ).filter(Match.event_id.in_(live_event_ids)).distinct()
+
+        user_ids_to_invalidate = {row.user_id for row in users_tracking_live_teams_query}
+
+        # Query all users that are tracking the player
+        users_tracking_live_players_query = db.session.query(user_tracked_players.c.user_id).join(
+            MatchPlayer, user_tracked_players.c.canonical_player_id == MatchPlayer.canonical_player_id
+        ).join(
+            MatchTeam, MatchPlayer.match_team_id == MatchTeam.id
+        ).join(
+            Match, MatchTeam.match_id == Match.id
+        ).filter(Match.event_id.in_(live_event_ids)).distinct()
+
+        user_ids_to_invalidate.update(row.user_id for row in users_tracking_live_players_query)
+
+        if not user_ids_to_invalidate:
+            app.logger.info("SCHEDULER: No users are tracking the current live games.")
+            # Stop running script
+            job_id = f"update_invalidate_caches_for_live_games"
+            scheduler.remove_job(id=job_id)
+            return
+
+        app.logger.info(f"SCHEDULER: Found {len(user_ids_to_invalidate)} users whose cache needs to be invalidated.")
+        for user_id in user_ids_to_invalidate:
+            cache.delete(f'dashboard_data_{user_id}')
+            app.logger.debug(f"SCHEDULER: Deleted cache for user {user_id}")

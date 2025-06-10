@@ -2,12 +2,126 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name = "viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
-    {% block head %}{% endblock %}
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - My App</title>
+    <meta name="csrf-token" content="{{ generate_csrf() }}">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 </head>
-<body>
-    {% block body %}{% endblock %}
+<body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200">
+
+    <nav class="bg-slate-800 shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <a href="{{ url_for('dashboard') if current_user.is_authenticated else url_for('login') }}" class="text-white font-bold text-xl hover:text-blue-300 transition">
+                        Esports Tracker
+                    </a>
+                </div>
+                <div class="hidden md:block">
+                    <div class="ml-10 flex items-baseline space-x-4">
+                        {% if current_user.is_authenticated %}
+                        <a href="{{ url_for('dashboard') }}" class="text-gray-300 hover:bg-slate-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Dashboard</a>
+                        <a href="{{ url_for('leagues') }}" class="text-gray-300 hover:bg-slate-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Leagues</a>
+                        <a href="{{ url_for('logout') }}" class="text-gray-300 hover:bg-slate-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Logout</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main>
+        <div class="container mx-auto mt-8 px-4">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                {# Mapping flash categories to Tailwind CSS alert colors #}
+                {% set alert_class = 'bg-blue-100 border-blue-500 text-blue-700' %}
+                {% if category == 'success' %}{% set alert_class = 'bg-green-100 border-green-500 text-green-700' %}{% endif %}
+                {% if category == 'danger' %}{% set alert_class = 'bg-red-100 border-red-500 text-red-700' %}{% endif %}
+                {% if category == 'info' %}{% set alert_class = 'bg-sky-100 border-sky-500 text-sky-700' %}{% endif %}
+
+                <div class="{{ alert_class }} border-l-4 p-4 mb-4 rounded-r-md" role="alert">
+                    <p>{{ message }}</p>
+                </div>
+                {% endfor %}
+            {% endif %}
+            {% endwith %}
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+    <script>
+        // Countdown timer
+        function countdown(expiry) {
+            return {
+                expiry: expiry,
+                display: "",
+                timer: null,
+                init() {
+                    this.update();
+                    this.timer = setInterval(() => {
+                        this.update();
+                    }, 1000);
+                },
+                update() {
+                    let date = new Date(this.expiry.replace('Z', ''));
+                    let now = new Date();
+                    let diff = date.getTime() - now.getTime();
+
+                    if (diff <= 0) {
+                        this.display = "Starting soon...";
+                        clearInterval(this.timer);
+                        return;
+                    }
+
+                    let days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                    let hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                    let minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                    let seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+                    let parts = [];
+                    if (days > 0) parts.push(`${days}d`);
+                    if (hours > 0 || days > 0) parts.push(`${hours}h`);
+                    if (minutes > 0 || hours > 0 || days > 0) parts.push(`${minutes}m`);
+                    if (seconds >= 0) parts.push(`${seconds}s`);
+
+                    this.display = parts.join(' ');
+                }
+            }
+        }
+       function handleTrackRequest(url) {
+            const csrf_token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+            return fetch(url, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrf_token,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: 'csrf_token=' + encodeURIComponent(csrf_token)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.status === 'success') {
+                    return true;
+                } else {
+                    console.error('Tracking request failed:', data.message);
+                    alert('An error occurred. Please try again.');
+                    return false;
+                }
+            })
+            .catch(error => {
+                console.error('Fetch Error:', error);
+                alert('A network error occurred. Please try again.');
+                return false;
+            });
+        }
+    </script>
 </body>
 </html>
