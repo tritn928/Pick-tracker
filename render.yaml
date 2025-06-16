@@ -26,12 +26,14 @@ services:
   - type: redis
     name: myapp-redis
     plan: free
+    ipAllowList: [] # Allows access from other Render services in your account
 
   # 2. The Flask Web Service (Gunicorn)
   - type: web
     name: myapp-web
+    runtime: docker # Explicitly tell Render to use Docker
     plan: free
-    dockerfilePath: ./Dockerfile 
+    dockerfilePath: ./Dockerfile
     dockerCommand: "gunicorn -c gunicorn.conf.py wsgi:app"
     envVars:
       - fromGroup: myapp-env # Reference the shared environment group
@@ -39,6 +41,7 @@ services:
   # 3. The Celery Beat Scheduler (Background Worker)
   - type: worker
     name: myapp-scheduler
+    runtime: docker # Explicitly tell Render to use Docker
     plan: free
     dockerfilePath: ./Dockerfile
     dockerCommand: "celery -A app.celery_app.celery beat -l info"
@@ -48,6 +51,7 @@ services:
   # 4. The Celery Worker (Background Worker)
   - type: worker
     name: myapp-worker
+    runtime: docker # Explicitly tell Render to use Docker
     plan: free
     dockerfilePath: ./Dockerfile
     dockerCommand: "celery -A run_celery.celery worker -l info"
