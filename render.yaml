@@ -1,0 +1,84 @@
+services:
+  # 1. The PostgreSQL Database Service
+  - type: pserv
+    name: myapp-db
+    docker_image: postgres:16-alpine
+    plan: free
+
+  # 2. The Redis Cache & Celery Broker Service
+  - type: pserv
+    name: myapp-redis
+    docker_image: redis:7-alpine
+    plan: free
+
+  # 3. The Flask Web Service (Gunicorn)
+  - type: web
+    name: myapp-web
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerCommand: "gunicorn -c gunicorn.conf.py wsgi:app"
+    envVars:
+      - key: FLASK_APP
+        value: wsgi.py
+      - key: SECRET_KEY
+        generateValue: true # Let Render generate a secure secret key
+      - key: DATABASE_URL
+        fromService:
+          type: pserv
+          name: myapp-db
+          property: connectionString
+      - key: CACHE_REDIS_URL
+        fromService:
+          type: pserv
+          name: myapp-redis
+          property: connectionString
+      - key: CELERY_BROKER_URL # Celery also needs the Redis URL
+        fromService:
+          type: pserv
+          name: myapp-redis
+          property: connectionString
+
+  # 4. The Celery Beat Scheduler (Background Worker)
+  - type: worker
+    name: myapp-scheduler
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerCommand: "celery -A app.celery_app.celery beat -l info"
+    envVars:
+      - fromGroup: myapp-env # Reference the shared environment group below
+
+  # 5. The Celery Worker (Background Worker)
+  - type: worker
+    name: myapp-worker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerCommand: "celery -A run_celery.celery worker -l info"
+    envVars:
+      - fromGroup: myapp-env # Reference the shared environment group below
+
+# Define a group of environment variables to share between services
+envVarGroups:
+  - name: myapp-env
+    envVars:
+      - key: FLASK_APP
+        value: wsgi.py
+      - key: SECRET_KEY
+        fromService:
+          type: web
+          name: myapp-web
+          envVarKey: SECRET_KEY
+      - key: DATABASE_URL
+        fromService:
+          type: pserv
+          name: myapp-db
+          property: connectionString
+      - key: CACHE_REDIS_URL
+        fromService:
+          type: pserv
+          name: myapp-redis
+          property: connectionString
+      - key: CELERY_BROKER_URL
+        fromService:
+          type: pserv
+          name: myapp-redis
+          property: connectionString
