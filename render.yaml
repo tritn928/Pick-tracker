@@ -1,14 +1,15 @@
 services:
   # 1. The PostgreSQL Database Service
-  - type: pserv
+  # Use the dedicated 'db' type for managed PostgreSQL
+  - type: db
     name: myapp-db
-    docker_image: postgres:16-alpine
+    postgresMajorVersion: 16
     plan: free
 
   # 2. The Redis Cache & Celery Broker Service
-  - type: pserv
+  # Use the dedicated 'redis' type for managed Redis
+  - type: redis
     name: myapp-redis
-    docker_image: redis:7-alpine
     plan: free
 
   # 3. The Flask Web Service (Gunicorn)
@@ -24,17 +25,17 @@ services:
         generateValue: true # Let Render generate a secure secret key
       - key: DATABASE_URL
         fromService:
-          type: pserv
+          type: db # Corrected type
           name: myapp-db
           property: connectionString
       - key: CACHE_REDIS_URL
         fromService:
-          type: pserv
+          type: redis # Corrected type
           name: myapp-redis
           property: connectionString
       - key: CELERY_BROKER_URL # Celery also needs the Redis URL
         fromService:
-          type: pserv
+          type: redis # Corrected type
           name: myapp-redis
           property: connectionString
 
@@ -69,16 +70,16 @@ envVarGroups:
           envVarKey: SECRET_KEY
       - key: DATABASE_URL
         fromService:
-          type: pserv
+          type: db # Corrected type
           name: myapp-db
           property: connectionString
       - key: CACHE_REDIS_URL
         fromService:
-          type: pserv
+          type: redis # Corrected type
           name: myapp-redis
           property: connectionString
       - key: CELERY_BROKER_URL
         fromService:
-          type: pserv
+          type: redis # Corrected type
           name: myapp-redis
           property: connectionString
