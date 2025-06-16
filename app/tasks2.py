@@ -1,61 +1,72 @@
-from sqlalchemy import or_
-from app.seeding_helpers import get_or_create_canonical_team, get_or_create_canonical_player
-from app import cache
-from .celery_app import celery
-from lolesports_api.rest_adapter import RestAdapter
-from app.models import *
 from flask import current_app
+from app import scheduler
+from app import db, cache
+from app.models import *
+from app.routes import _get_latest_events_for_entities
+from lolesports_api.rest_adapter import RestAdapter
 import time
-from celery import chain, group
+from datetime import datetime, timedelta, timezone
+from sqlalchemy import or_
 
-from .logic import get_dashboard_data
+from seed import get_or_create_canonical_player, get_or_create_canonical_team
 
 lolapi = RestAdapter(hostname='esports-api.lolesports.com', api_key='0TvQnueqKa5mxJntVWt0w4LpLfEkrV1Ta8rQBb9Z')
 
-@celery.task
-def invalidate_dashboard_cache(user_id):
-    """Deletes the cached dashboard data for a single user."""
-    try:
-        # Use cache.delete_memoized(), passing it the function object
-        # and the arguments that were used to create the cache key.
-        cache.delete_memoized(get_dashboard_data, user_id)
-        current_app.logger.info(f"Invalidated dashboard cache for user {user_id}.")
-    except Exception as e:
-        current_app.logger.error(f"Failed to invalidate cache for user {user_id}: {e}")
-
 # Updates all leagues with new Events
 # Kicks off additional jobs to populate the events
-@celery.task
 def update_leagues():
-    current_app.logger.info("SCHEDULER: Running job to update leagues. Time: " + str(datetime.now(timezone.utc)))
-    all_leagues = League.query.all()
-    for league in all_leagues:
-        event_schedule = lolapi.get_schedule(league_name=league.name, league_id=league.league_id)
-        existing_event_match_ids = {event.match_id for event in
-                                    Event.query.filter_by(league_id=league.id).with_entities(Event.match_id).all()}
-        events_to_add = []
-        for event in event_schedule.events:
-            if event.match_id not in existing_event_match_ids:
-                current_app.logger.info(f"SCHEDULER: Found a new event {event.match_id} for league {league.name}")
-                new_event = Event(
-                    start_time=event.start_time,
-                    strategy=event.strategy,
-                    state=event.state,
-                    match_id=event.match_id,
-                    team_one=event.teams[0].get('name'),
-                    team_two=event.teams[1].get('name'),
-                    league_id=league.id,
-                    start_time_datetime= datetime.strptime(event.start_time, "%Y-%m-%dT%H:%M:%SZ").replace(
-                        tzinfo=timezone.utc)
-                )
-                events_to_add.append(new_event)
-        if events_to_add:
-            db.session.add_all(events_to_add)
-            db.session.commit()
-        time.sleep(.2)
-    current_app.logger.info("SCHEDULER: Finished task update_leagues. Time: " + str(datetime.now(timezone.utc)))
+    print("getting here...")
+    with current_app.app_context():
+        current_app.logger.info("SCHEDULER: Running job to update leagues. Time: " + str(datetime.now(timezone.utc)))
+        all_leagues = League.query.all()
+        for league in all_leagues:
+            event_schedule = lolapi.get_schedule(league_name=league.name, league_id=league.league_id)
+            existing_event_match_ids = {event.match_id for event in
+                                        Event.query.filter_by(league_id=league.id).with_entities(Event.match_id).all()}
+            events_to_add = []
+            for event in event_schedule.events:
+                if event.match_id not in existing_event_match_ids:
+                    current_app.logger.info(f"SCHEDULER: Found a new event {event.match_id} for league {league.name}")
+                    new_event = Event(
+                        start_time=event.start_time,
+                        strategy=event.strategy,
+                        state=event.state,
+                        match_id=event.match_id,
+                        team_one=event.teams[0].get('name'),
+                        team_two=event.teams[1].get('name'),
+                        league_id=league.id
+                    )
+                    events_to_add.append(new_event)
+            if events_to_add:
+                db.session.add_all(events_to_add)
+                db.session.commit()
+            time.sleep(.5)
+        current_app.logger.info("SCHEDULER: Finished updating all leagues. Time: " + str(datetime.now(timezone.utc)))
+        job_id = f"update_completed_events"
+        if not scheduler.get_job(job_id):
+            current_app.logger.info(
+                f"SCHEDULER: Kicking off populating completed events without match or games")
+            scheduler.add_job(
+                id=job_id,
+                func=populate_completed_events,
+                trigger='date',
+                run_date=datetime.now(),
+                misfire_grace_time=None
+            )
+        time.sleep(5)
+        job_id = f"populate_unstarted_events"
+        if not scheduler.get_job(job_id):
+            current_app.logger.info(
+                f"SCHEDULER: Kicking off populating new unstarted events")
+            scheduler.add_job(
+                id=job_id,
+                func=populate_unstarted_events,
+                trigger='date',
+                run_date=datetime.now(),
+                misfire_grace_time=None
+            )
+        time.sleep(5)
 
-@celery.task
 # Populates newly added completed events
 def populate_unstarted_events():
     with current_app.app_context():
@@ -115,7 +126,6 @@ def populate_unstarted_events():
             current_app.logger.info(f"SCHEDULER: Updated Unstarted Event {event.id} in league {event.league.name}")
         current_app.logger.info("SCHEDULER: Finished populating unstarted events")
 
-@celery.task
 # Updates unstarted events with TBD teams
 def update_TBD_event(event_id):
     with current_app.app_context():
@@ -155,7 +165,6 @@ def update_TBD_event(event_id):
         db.session.commit()
         current_app.logger.info(f"Finished updating TBD event with ID {event.id} in league {event.league.name}")
 
-@celery.task
 # Populates newly added completed events
 def populate_completed_events():
     with current_app.app_context():
@@ -320,30 +329,88 @@ def populate_completed_events():
                             db.session.add(gpp)
         current_app.logger.info("Finished processing all new completed events")
 
-@celery.task
-def kick_off_league_update_workflow():
-    """
-    This is the master task that Celery Beat will schedule.
-    It defines the entire workflow and starts it.
-    """
-    current_app.logger.info("Kicking off the main league update workflow.")
+# Updates TBD teams and then schedules live tracking for events that are about to start.
+def process_unstarted_events():
+    with current_app.app_context():
+        now = datetime.now(timezone.utc)
+        current_app.logger.info(f"SCHEDULER: Running job to process unstarted events at {now.isoformat()}")
 
-    # Define the workflow:
-    # 1. Run update_leagues() first.
-    # 2. Then, run the other two tasks in parallel.
-    # Note: The result of update_leagues will be passed to BOTH parallel tasks.
-    workflow = chain(
-        update_leagues.s(),
-        group(
-            populate_completed_events.si(),
-            populate_unstarted_events.si()
-        )
-    )
+        unstarted_events = Event.query.filter_by(state='unstarted').all()
 
-    # Execute the entire workflow in the background
-    workflow.apply_async()
+        # Update events with TBD teams
+        tbd_events = [e for e in unstarted_events if e.team_one == 'TBD' or e.team_two == 'TBD']
+        if tbd_events:
+            current_app.logger.info(f"Found {len(tbd_events)} unstarted events with TBD teams to update.")
+            for event in tbd_events:
+                try:
+                    update_TBD_event(event.id)
+                except Exception as e:
+                    current_app.logger.error(f"Error updating TBD for Event {event.id}: {e}")
+                    db.session.rollback()
+            db.session.commit()
 
-    current_app.logger.info("League update workflow has been successfully queued.")
+        events_to_check = [e for e in unstarted_events if e.team_one != 'TBD' and e.team_two != 'TBD']
+
+        for event in events_to_check:
+            if not event.start_time_datetime:
+                try:
+                    event.start_time_datetime = datetime.strptime(event.start_time, "%Y-%m-%dT%H:%M:%SZ").replace(
+                        tzinfo=timezone.utc)
+                except (ValueError, TypeError):
+                    current_app.logger.warning(f"Could not parse start_time for Event {event.id}. Skipping start check.")
+                    continue
+
+            start_time = event.start_time_datetime.replace(tzinfo=timezone.utc)
+            if (now - start_time) > timedelta(minutes=5):
+                job_id = f"start_tracking_match_{event.match_id}"
+                if not scheduler.get_job(job_id):
+                    current_app.logger.info(
+                        f"SCHEDULER: Event {event.match_id} is starting soon. Scheduling job to run at {start_time.isoformat()}")
+                    scheduler.add_job(
+                        id=job_id,
+                        func='app.tasks:track_unstarted_event',
+                        trigger='date',
+                        run_date=start_time,
+                        args=[event.id],
+                        misfire_grace_time=None
+                    )
+
+        current_app.logger.info("SCHEDULER: Finished processing unstarted events.")
+
+# updates the event state and schedules the recurring "in-progress" job
+def track_unstarted_event(event_id):
+    with current_app.app_context():
+        event = Event.query.get(event_id)
+        if not event:
+            current_app.logger.error(f"SCHEDULER: Can't track event, Event ID {event_id} not found.")
+            return
+
+        current_app.logger.info(f"Match {event.match_id} is starting. Updating state to inProgress.")
+        event.state = 'inProgress'
+        db.session.commit()
+
+        job_id = f"update_in_progress_match_{event.match_id}"
+        if not scheduler.get_job(job_id):
+            scheduler.add_job(
+                id=job_id,
+                func='app.tasks:update_in_progress_match',
+                trigger='interval',
+                seconds=20,
+                args=[event.id],
+                misfire_grace_time=None
+            )
+
+        job_id = f"update_invalidate_caches_for_live_games"
+        if not scheduler.get_job(job_id):
+            scheduler.add_job(
+                id=job_id,
+                func=invalidate_caches_for_live_games,
+                trigger='interval',
+                minutes=1,
+                replace_existing=True,
+                misfire_grace_time = None,
+                next_run_time=datetime.now()
+            )
 
 # Helper function to retrieve a Game object from a game_id
 def get_or_create_game(cur_match, game_id):
@@ -443,12 +510,10 @@ def get_or_create_player(cur_team, player):
         cur_player.creeps = player.creeps
     return cur_player
 
-@celery.task
 # Handles updating a match in progress
 def update_in_progress_match(event_id):
     with current_app.app_context():
         event = Event.query.get(event_id)
-        lock_key = f"polling_lock_match_{event.match_id}"
         current_app.logger.info(f"SCHEDULER: Polling for live stats for match {event.match_id}...")
         match_details = lolapi.get_match(event.match_id)
 
@@ -462,29 +527,25 @@ def update_in_progress_match(event_id):
                 for player in team.players:
                     cur_player = get_or_create_player(cur_team, player)
 
-        # Now, check the state to decide what to do next
         if match_details.state == 'completed':
-            current_app.logger.info(f"Match {event.match_id} has completed. Stopping polling.")
-
-            # Perform final actions
-            invalidate_caches_for_live_games()  # Your function to clear user caches
+            current_app.logger.info(f"SCHEDULER: Match {event.match_id} has completed. Stopping polling job.")
+            invalidate_caches_for_live_games()
             event.state = 'completed'
             db.session.commit()
-
-            # *** THIS REPLACES `scheduler.remove_job()` ***
-            # Release the lock so the main checker knows it can start a new poll
-            # for this match in the future if it ever goes live again.
-            cache.delete(lock_key)
-
+            scheduler.remove_job(id=f"update_in_progress_match_{event.match_id}")
+        elif event.state != match_details.state:
+            event.state = match_details.state
+            db.session.commit()
         else:
-            # The match is not complete, so re-queue this same task to run again.
-            current_app.logger.info(f"Match {event.match_id} is still in progress. Re-queueing polling task.")
+            db.session.commit()
 
-            # *** THIS REPLACES THE 'interval' TRIGGER ***
-            # Use apply_async with a countdown to run this task again in 20 seconds.
-            update_in_progress_match.apply_async(args=[event_id], countdown=20)
+def print_jobs():
+    print("IN PRINT_JOBS")
+    with current_app.app_context():
+        for job in scheduler.get_jobs():
+            print("JOB")
+            current_app.logger.info(f"SCHEDULED JOB - ID:{job.id}")
 
-@celery.task
 # Finds and deletes MatchPlayer records that have no associated game statistics
 # Only cleans up completed events
 def cleanup_unused_match_players():
@@ -526,7 +587,6 @@ def cleanup_unused_match_players():
             db.session.rollback()
             current_app.logger.error(f"An error occurred during MatchPlayer bulk cleanup: {e}", exc_info=True)
 
-@celery.task
 # Finds all users tracking any live game and clear their dashboard cache
 def invalidate_caches_for_live_games():
     with current_app.app_context():
@@ -563,305 +623,29 @@ def invalidate_caches_for_live_games():
         if not user_ids_to_invalidate:
             current_app.logger.info("SCHEDULER: No users are tracking the current live games.")
             # Stop running script
-            # job_id = f"update_invalidate_caches_for_live_games"
-            # scheduler.remove_job(id=job_id)
+            job_id = f"update_invalidate_caches_for_live_games"
+            scheduler.remove_job(id=job_id)
             return
 
         current_app.logger.info(f"SCHEDULER: Found {len(user_ids_to_invalidate)} users whose cache needs to be invalidated.")
         for user_id in user_ids_to_invalidate:
-            invalidate_dashboard_cache(user_id)
+            cache.delete_memoized(_get_latest_events_for_entities, user_id)
+            current_app.logger.debug(f"SCHEDULER: Deleted cache for user {user_id}")
 
-@celery.task
 def check_in_progress():
-    """
-    Finds all 'inProgress' events and starts a polling task chain for each one,
-    but only if a polling chain isn't already active for that match.
-    """
-    current_app.logger.info("Checking for all in_progress events...")
-    events_to_check = Event.query.filter(Event.state == 'inProgress').all()
-
-    for event in events_to_check:
-        # Simply call the helper. The lock inside will prevent duplicate chains.
-        start_match_polling_chain.delay(event.id)
-
-    current_app.logger.info("Finished checking for all in_progress events.")
-
-@celery.task
-def start_match_polling_chain(event_id):
-    """
-    Safely starts the polling process for an event.
-    - Updates the event state to 'inProgress'.
-    - Sets a Redis lock to prevent duplicate polling chains.
-    - Kicks off the first run of the 'update_in_progress_match' task.
-    This task is idempotent: calling it multiple times for the same active
-    event will have no negative effect.
-    """
-    event = Event.query.get(event_id)
-    if not event:
-        current_app.logger.error(f"Task 'start_match_polling_chain' could not find event {event_id}.")
-        return
-
-    lock_key = f"polling_lock_match_{event.match_id}"
-
-    # If a lock already exists, another process has already started this. We can safely exit.
-    if cache.get(lock_key):
-        current_app.logger.info(f"Polling for match {event.match_id} is already active. Skipping start request.")
-        return
-
-    current_app.logger.info(f"Match {event.match_id} is starting. Kicking off polling chain.")
-
-    # 1. Update the event state
-    event.state = 'inProgress'
-    db.session.commit()
-
-    # 2. Set the lock to prevent other tasks from starting a duplicate chain
-    cache.set(lock_key, "locked", timeout=300) # 5-minute safety timeout
-
-    # 3. Kick off the first run of the actual polling task
-    update_in_progress_match.delay(event.id)
-
-@celery.task
-# Updates TBD teams and then schedules live tracking for events that are about to start.
-def process_unstarted_events():
     with current_app.app_context():
-        now = datetime.now(timezone.utc)
-        current_app.logger.info(f"SCHEDULER: Running job to process unstarted events at {now.isoformat()}")
-
-        unstarted_events = Event.query.filter_by(state='unstarted').all()
-
-        # Update events with TBD teams
-        tbd_events = [e for e in unstarted_events if e.team_one == 'TBD' or e.team_two == 'TBD']
-        if tbd_events:
-            current_app.logger.info(f"Found {len(tbd_events)} unstarted events with TBD teams to update.")
-            for event in tbd_events:
-                try:
-                    update_TBD_event(event.id)
-                except Exception as e:
-                    current_app.logger.error(f"Error updating TBD for Event {event.id}: {e}")
-                    db.session.rollback()
-            db.session.commit()
-
-        events_to_check = [e for e in unstarted_events if e.team_one != 'TBD' and e.team_two != 'TBD']
-
+        current_app.logger.info("SCHEDULER: Start checking all in_progress events")
+        events_to_check = Event.query.filter(Event.state == 'inProgress').all()
         for event in events_to_check:
-            if not event.start_time_datetime:
-                try:
-                    event.start_time_datetime = datetime.strptime(event.start_time, "%Y-%m-%dT%H:%M:%SZ").replace(
-                        tzinfo=timezone.utc)
-                except (ValueError, TypeError):
-                    current_app.logger.warning(f"Could not parse start_time for Event {event.id}. Skipping start check.")
-                    continue
-
-            if event.start_time_datetime.replace(tzinfo=timezone.utc) <= now:
-                start_match_polling_chain.delay(event.id)
-
-        current_app.logger.info("SCHEDULER: Finished processing unstarted events.")
-
-
-# --- Stage 1 Task ---
-@celery.task(name='tasks.seed_leagues')
-def seed_leagues_task():
-    """Seeds all leagues from the API."""
-    current_app.logger.info("Starting task: seed_leagues_task")
-    ignore = ['LCL', 'TFT Esports', 'LCS', "King's Duel", 'Worlds Qualifying Series', 'LCO', 'LLA', 'CBLOL']
-    leagues_list = lolapi.get_leagues()
-    to_add = [
-        League(name=league['name'], league_id=league['id'], image=league['image'])
-        for league in leagues_list if league['name'] not in ignore
-    ]
-    if to_add:
-        # Use bulk_save_objects for efficient batch inserting
-        db.session.bulk_save_objects(to_add)
-        db.session.commit()
-    current_app.logger.info(f"Finished seeding {len(to_add)} leagues.")
-
-
-# --- Stage 2 Task ---
-@celery.task(name='tasks.seed_events_for_league')
-def seed_events_for_league_task(league_id):
-    """Seeds all events for a single league."""
-    league = League.query.get(league_id)
-    if not league:
-        return
-
-    current_app.logger.info(f"Starting to seed events for league: {league.name}")
-    event_schedule = lolapi.get_schedule(league.name, league.league_id)
-    existing_event_match_ids = {e.match_id for e in
-                                Event.query.filter_by(league_id=league.id).with_entities(Event.match_id)}
-
-    to_add = []
-    for event_data in event_schedule.events:
-        if event_data.match_id in existing_event_match_ids:
-            continue
-
-        new_event = Event(
-            start_time=event_data.start_time,
-            state=event_data.state,
-            match_id=event_data.match_id,
-            team_one=event_data.teams[0].get('name'),
-            team_two=event_data.teams[1].get('name'),
-            league_id=league.id,
-            start_time_datetime=datetime.strptime(event_data.start_time, "%Y-%m-%dT%H:%M:%SZ").replace(
-                tzinfo=timezone.utc)
-        )
-        to_add.append(new_event)
-
-    if to_add:
-        db.session.bulk_save_objects(to_add)
-        db.session.commit()
-    time.sleep(0.4)  # Keep API rate limiting if necessary
-
-
-# --- Stage 3 Task ---
-@celery.task(name='tasks.seed_match_for_event', bind=True)
-def seed_match_for_event_task(self, event_id):
-    """Seeds the detailed match data for a single event."""
-    event = Event.query.get(event_id)
-    if not event:
-        current_app.logger.warning(f"Skipping match seed: Event ID {event_id} not found.")
-        return
-    if event.match:  # Skip if match is already seeded
-        current_app.logger.info(f"Skipping match seed: Event {event.match_id} already has a match.")
-        return
-
-    current_app.logger.info(f"Starting to seed match for event: {event.match_id} (Event PK: {event.id})")
-
-    try:
-        match_details_api = lolapi.get_match(event.match_id)
-
-        # *** THE FIX IS HERE: Associate the new match with the event ***
-        new_match = Match(team_one_id=match_details_api.team_ids[0], team_two_id=match_details_api.team_ids[1])
-        event.match = new_match  # This line was missing
-
-        current_match_players_map = {}
-        # Now this line will work correctly
-        api_teams_in_match = lolapi.get_teams([event.match.team_one_id, event.match.team_two_id])
-
-        # Gets the teams involved in the match
-        for api_team_data in api_teams_in_match:
-            if api_team_data['name'] == 'TBD':
-                match_team = MatchTeam(name='TBD', image=None, match=new_match)
-                db.session.add(match_team)
-                continue
-
-            canonical_team = get_or_create_canonical_team(api_team_data, event.league)
-            match_team = MatchTeam(name=canonical_team.name, image=canonical_team.image, match=new_match,
-                                   canonical_team=canonical_team)
-            db.session.add(match_team)
-
-            # Create MatchPlayers
-            for api_player_data in api_team_data.get('players', []):
-                canonical_player = get_or_create_canonical_player(api_player_data, event.league, canonical_team)
-                if canonical_player:
-                    match_player = MatchPlayer(name=canonical_player.name, role=api_player_data['role'],
-                                               image=canonical_player.image, match_team=match_team,
-                                               canonical_player=canonical_player)
-                    db.session.add(match_player)
-                    current_match_players_map[canonical_player.external_id] = match_player
-
-        # Adds the existing games
-        if not event.match.games:
-            for api_game_data in match_details_api.games:
-                # Create Game Obj
-                game_obj = Game(
-                    game_id=api_game_data.id
+            job_id = f"update_in_progress_match_{event.match_id}"
+            if not scheduler.get_job(job_id):
+                scheduler.add_job(
+                    id=job_id,
+                    func='app.tasks:update_in_progress_match',
+                    trigger='interval',
+                    seconds=20,
+                    args=[event.id],
+                    misfire_grace_time=None
                 )
-                game_obj.match = new_match
-                db.session.add(game_obj)
-
-                # Create GameTeam
-                for api_team_in_game in api_game_data.teams:
-                    canonical_team_for_game = CanonicalTeam.query.filter_by(
-                        external_id=api_team_in_game.team_id).first()
-                    game_team = GameTeam(
-                        team_id=api_team_in_game.team_id,
-                        team_name=canonical_team_for_game.name,
-                    )
-                    game_team.game = game_obj
-                    game_team.canonical_team = canonical_team_for_game
-                    db.session.add(game_team)
-
-                    # Create GamePlayers
-                    for api_player_stats in api_team_in_game.players:
-                        if api_player_stats.id is None:
-                            continue
-
-                        # Creates player_data for this specific player
-                        player_data_for_creation = {
-                            'id': api_player_stats.id,
-                            'summonerName': api_player_stats.name,
-                            'role': api_player_stats.role,
-                            'image': None
-                        }
-                        # Attempt to retrieve an existing canonical_player
-                        # Or create a new canonical_player
-                        canonical_player_for_stats = get_or_create_canonical_player(
-                            player_data_for_creation,
-                            event.league,
-                            team_to_associate_if_new=canonical_team_for_game
-                        )
-                        # Pair the canonical_player with the MatchPlayer in the map
-                        match_player_for_stats = current_match_players_map.get(
-                            canonical_player_for_stats.external_id)
-                        if not match_player_for_stats:
-                            # If the current Game player is not a MatchPlayer
-                            target_match_team_for_sub = None
-                            for mt_in_match in new_match.match_teams:
-                                # Iterate over MatchTeams already created for this match
-                                # Look for the id that is associated with this MatchTeam
-                                if mt_in_match.canonical_team_id == canonical_team_for_game.id or \
-                                        (
-                                                mt_in_match.canonical_team and mt_in_match.canonical_team.id == canonical_team_for_game.id):
-                                    target_match_team_for_sub = mt_in_match
-                                    break
-                            # If successfully found the MatchTeam, create a MatchPlayer for the sub
-                            if target_match_team_for_sub:
-                                match_player_for_stats = MatchPlayer(
-                                    name=canonical_player_for_stats.name,
-                                    role=api_player_stats.role,
-                                    image=canonical_player_for_stats.image,
-                                )
-                                match_player_for_stats.match_team = target_match_team_for_sub
-                                match_player_for_stats.canonical_player = canonical_player_for_stats
-                                db.session.add(match_player_for_stats)
-                                current_match_players_map[
-                                    str(canonical_player_for_stats.external_id)] = match_player_for_stats
-                                current_app.logger.info(
-                                    f"Created MatchPlayer for substitute {canonical_player_for_stats.name} in MatchTeam {target_match_team_for_sub.name}")
-                            else:
-                                current_app.logger.error(
-                                    f"Could not find MatchTeam for substitute player {canonical_player_for_stats.name} (associated with CTeam {canonical_team_for_game.name}) in Match for Event PK {event.id}. Skipping GPP.")
-                                continue
-                        db.session.flush()
-                        # Add a player's stats for a game and pair it to the MatchPlayer and CanonicalPlayer
-                        gpp = GamePlayerPerformance(
-                            name=canonical_player_for_stats.name,
-                            role=api_player_stats.role,
-                            champion=api_player_stats.champion,
-                            gold=api_player_stats.gold,
-                            level=api_player_stats.level,
-                            kills=api_player_stats.kills,
-                            deaths=api_player_stats.deaths,
-                            assists=api_player_stats.assists,
-                            creeps=api_player_stats.creeps,
-                            canonical_player_id=canonical_player_for_stats.id,
-                            match_player_id=match_player_for_stats.id
-                        )
-                        match_player = match_player_for_stats if match_player_for_stats else None
-                        if hasattr(game_team, 'gamePlayers'): game_team.gamePlayers.append(gpp)
-                        if hasattr(canonical_player_for_stats,
-                                   'game_performances'): canonical_player_for_stats.game_performances.append(
-                            gpp)
-                        if match_player_for_stats and hasattr(match_player_for_stats, 'game_stats'):
-                            match_player_for_stats.game_stats.append(gpp)
-                        db.session.add(gpp)
-
-        # A single commit at the end of the task for maximum efficiency
-        db.session.commit()
-        current_app.logger.info(f"✅ Successfully seeded match for event: {event.match_id} (Event PK: {event.id})")
-        time.sleep(0.1)
-    except Exception as e:
-        current_app.logger.error(f"❌ Failed to seed match for event {event_id}. Error: {e}", exc_info=True)
-        db.session.rollback()
-        # Retry the task after a delay
-        raise self.retry(exc=e, countdown=60)
+            time.sleep(2)
+        current_app.logger.info("SCHEDULER: Finished checking all in_progress events")

@@ -1,0 +1,25 @@
+# Ignore the local virtual environment
+venv/
+/venv/
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore IDE and OS files
+.idea/
+.vscode/
+.DS_Store
+
+# Ignore instance folder which may contain local-only DBs
+instance/
+
+# Ignore git folder
+.git/
+.gitignore
+
+# Ignore docker files from being copied into the image
+Dockerfile
+docker-compose.yml

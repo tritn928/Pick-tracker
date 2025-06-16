@@ -88,7 +88,7 @@ class Event(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     league_id = db.Column(db.Integer, db.ForeignKey('leagues.id'), nullable=False)
     start_time = db.Column(db.String(50), nullable=False)
-    strategy = db.Column(db.Integer, nullable=False)
+    strategy = db.Column(db.Integer)
     state = db.Column(db.String(50), nullable=False)
     match_id = db.Column(db.String(50), nullable=False)
     team_one = db.Column(db.String(50), nullable=False)

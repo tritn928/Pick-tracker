@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  # The Flask Application Service (Web Server)
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    # The command to start the Gunicorn web server, using the config file
+    # It looks for the 'app' variable in the 'site' module (site.py)
+    command: ["gunicorn", "-c", "gunicorn.conf.py", "wsgi:app"]
+    depends_on:
+      - db
+      - redis
+
+  scheduler:
+    build: .
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - db
+      - web
+    command: [ "celery", "-A", "app.celery_app.celery", "beat", "-l", "info" ]
+
+  worker:
+    build: .
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - db
+      - web
+    command: [ "celery", "-A", "run_celery.celery", "worker", "-l", "info" ]
+
+  # The PostgreSQL Database Service
+  db:
+    image: postgres:16-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    env_file:
+      - .env
+    healthcheck: # <-- ADD THIS HEALTHCHECK FOR POSTGRES
+      # The command to check if Postgres is ready
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5432:5432"
+
+  # The Redis Cache Service
+  redis:
+    image: redis:7-alpine
+    healthcheck: # <-- ADD THIS ENTIRE BLOCK
+      # The command Docker runs to check the health
+      test: [ "CMD", "redis-cli", "ping" ]
+      # How often to run the check
+      interval: 10s
+      # How long to wait for a response
+      timeout: 5s
+      # How many times to retry before marking as unhealthy
+      retries: 5
+    volumes:
+      - redis_data:/data
+
+# Docker Volumes for data persistence
+volumes:
+  postgres_data:
+  redis_data:
