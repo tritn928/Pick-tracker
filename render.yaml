@@ -20,7 +20,8 @@ services:
     runtime: docker # Explicitly tell Render to use Docker
     plan: free
     dockerfilePath: ./Dockerfile
-    dockerCommand: "gunicorn,-c,gunicorn.conf.py,wsgi:app"
+    # Use a shell to correctly parse the command and its arguments
+    dockerCommand: "/bin/sh -c 'gunicorn -c gunicorn.conf.py wsgi:app'"
     envVars:
       - fromGroup: myapp-static-env # Use the static group
       # Define dynamic variables directly in the service
@@ -45,7 +46,8 @@ services:
     runtime: docker # Explicitly tell Render to use Docker
     plan: free
     dockerfilePath: ./Dockerfile
-    dockerCommand: "celery,-A,app.celery_app.celery,beat,-l,info"
+    # Use a shell to correctly parse the command and its arguments
+    dockerCommand: "/bin/sh -c 'celery -A app.celery_app.celery beat -l info'"
     envVars:
       - fromGroup: myapp-static-env # Reference the shared environment group
       - key: DATABASE_URL
@@ -69,7 +71,8 @@ services:
     runtime: docker # Explicitly tell Render to use Docker
     plan: free
     dockerfilePath: ./Dockerfile
-    dockerCommand: "celery,-A,run_celery.celery,worker,-l,info"
+    # Use a shell to correctly parse the command and its arguments
+    dockerCommand: "/bin/sh -c 'celery -A run_celery.celery worker -l info'"
     envVars:
       - fromGroup: myapp-static-env # Reference the shared environment group
       - key: DATABASE_URL
