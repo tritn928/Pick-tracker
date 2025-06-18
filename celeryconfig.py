@@ -1,10 +1,9 @@
 # celeryconfig.py
-
+import os
 from celery.schedules import crontab
 
-# Basic broker and backend configuration
-broker_url = 'redis://redis:6379/1'
-result_backend = 'redis://redis:6379/2'
+broker_url = os.environ.get('CELERY_BROKER_URL')
+result_backend = os.environ.get('CELERY_BROKER_URL')
 timezone = 'UTC'
 
 # --- THE MOST IMPORTANT LINE ---
@@ -19,8 +18,12 @@ beat_schedule = {
         'task': 'app.tasks.process_unstarted_events',
         'schedule': crontab(minute='*/5'), # Run every 5 minutes
     },
-    'safety-check-for-live-games-every-20-minutes': {
+    'safety-check-for-live-games-every-30-minutes': {
         'task': 'app.tasks.check_in_progress',
-        'schedule': crontab(minute='*/20'), # Run every 20 minutes
+        'schedule': crontab(minute='*/30'), # Run every 30 minutes
+    },
+    'cleanup_unused_match_players_once_a_day': {
+        'task': 'app.tasks.cleanup_unused_match_players',
+        'schedule': crontab(hour=0, minute=0),
     }
 }
