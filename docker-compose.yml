@@ -5,7 +5,7 @@ services:
   web:
     build: .
     ports:
-      - "5000:5000"
+      - "80:5000"
     volumes:
       - .:/app
     env_file:
@@ -39,7 +39,7 @@ services:
 
   # The PostgreSQL Database Service
   db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     volumes:
       - postgres_data:/var/lib/postgresql/data/
     env_file:
