@@ -19,6 +19,7 @@ instance/
 # Ignore git folder
 .git/
 .gitignore
+.env
 
 # Ignore docker files from being copied into the image
 Dockerfile
