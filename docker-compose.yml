@@ -17,15 +17,15 @@ services:
       - db
       - redis
 
-  scheduler:
-    build: .
-    env_file:
-      - .env
-    depends_on:
-      - redis
-      - db
-      - web
-    command: [ "celery", "-A", "app.celery_app.celery", "beat", "-l", "info" ]
+#  scheduler:
+#    build: .
+#    env_file:
+#      - .env
+#    depends_on:
+#      - redis
+#      - db
+#      - web
+#    command: [ "celery", "-A", "app.celery_app.celery", "beat", "-l", "info" ]
 
   worker:
     build: .
