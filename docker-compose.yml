@@ -4,8 +4,7 @@ services:
   # The Flask Application Service (Web Server)
   web:
     build: .
-    ports:
-      - "80:5000"
+    network_mode: "host"
     env_file:
       - .env
     # The command to start the Gunicorn web server, using the config file
@@ -18,6 +17,7 @@ services:
 
   scheduler:
     build: .
+    network_mode: "host"
     env_file:
       - .env
     depends_on:
@@ -30,6 +30,7 @@ services:
 
   worker:
     build: .
+    network_mode: "host"
     env_file:
       - .env
     depends_on:
