@@ -49,5 +49,5 @@ services:
         limits:
           memory: 64M
 
-  volumes:
-    redis_data:
+volumes:
+  redis_data:
