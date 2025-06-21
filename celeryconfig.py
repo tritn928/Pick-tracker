@@ -5,6 +5,7 @@ from celery.schedules import crontab
 broker_url = os.environ.get('CELERY_BROKER_URL')
 result_backend = os.environ.get('CELERY_BROKER_URL')
 timezone = 'UTC'
+task_always_eager = False
 
 # --- THE MOST IMPORTANT LINE ---
 # This tuple explicitly tells Celery which modules contain your tasks.
