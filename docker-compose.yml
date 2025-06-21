@@ -6,8 +6,6 @@ services:
     build: .
     ports:
       - "80:5000"
-    volumes:
-      - .:/app
     env_file:
       - .env
     # The command to start the Gunicorn web server, using the config file
@@ -24,7 +22,7 @@ services:
       - .env
     depends_on:
       - web
-    command: [ "celery", "-A", "app.celery_app.celery", "beat", "-l", "info" ]
+    command: [ "celery", "-A", "app.celery_app.celery", "beat", "-l", "debug" ]
     deploy:
       resources:
         limits:
@@ -36,7 +34,7 @@ services:
       - .env
     depends_on:
       - web
-    command: [ "celery", "-A", "run_celery.celery", "worker", "-l", "info" ]
+    command: [ "celery", "-A", "run_celery.celery", "worker", "-l", "debug" ]
     deploy:
       resources:
         limits:
