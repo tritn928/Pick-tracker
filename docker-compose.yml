@@ -22,7 +22,7 @@ services:
       - .env
     depends_on:
       - web
-    command: [ "celery", "-A", "app.celery_app.celery", "beat", "-l", "debug" ]
+    command: [ "celery", "-A", "app.celery_app.celery", "beat", "-l", "info" ]
     deploy:
       resources:
         limits:
@@ -34,7 +34,7 @@ services:
       - .env
     depends_on:
       - web
-    command: [ "celery", "-A", "run_celery.celery", "worker", "-l", "debug" ]
+    command: [ "celery", "-A", "run_celery.celery", "worker", "-l", "info" ]
     deploy:
       resources:
         limits:
