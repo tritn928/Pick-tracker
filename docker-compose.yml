@@ -38,4 +38,16 @@ services:
     deploy:
       resources:
         limits:
-          memory: 425M
+          memory: 350M
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
+  volumes:
+    redis_data:
