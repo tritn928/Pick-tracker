@@ -713,7 +713,7 @@ def process_unstarted_events(self):
 def seed_leagues_task():
     """Seeds all leagues from the API."""
     current_app.logger.info("Starting task: seed_leagues_task")
-    ignore = ['LCL', 'TFT Esports', 'LCS', "King's Duel", 'Worlds Qualifying Series', 'LCO', 'LLA', 'CBLOL', 'Arabian League']
+    ignore = ['LCL', "TFT Esports ", 'LCS', "King's Duel", 'Worlds Qualifying Series', 'LCO', 'LLA', 'CBLOL', 'Arabian League']
     leagues_list = lolapi.get_leagues()
     to_add = [
         League(name=league['name'], league_id=league['id'], image=league['image'])
