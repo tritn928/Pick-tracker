@@ -506,6 +506,7 @@ def update_in_progress_match(self, event_id):
                 # *** THIS REPLACES THE 'interval' TRIGGER ***
                 # Use apply_async with a countdown to run this task again in 20 seconds.
                 db.session.commit()
+                invalidate_caches_for_live_games()
                 update_in_progress_match.apply_async(args=[event_id], countdown=20)
         except OperationalError as exc:
             raise self.retry(exc=exc, countdown=60, max_retries=3)
