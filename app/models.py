@@ -4,22 +4,30 @@ from app import db, login_manager
 from datetime import datetime, timezone
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
+from sqlalchemy.dialects.postgresql import JSONB
 
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# This table links Users to the CanonicalTeams they are tracking.
-user_tracked_teams = db.Table('user_tracked_teams',
-    db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
-    db.Column('canonical_team_id', db.Integer, db.ForeignKey('canonical_teams.id'), primary_key=True)
-)
 
-# This table links Users to the CanonicalPlayers they are tracking.
-user_tracked_players = db.Table('user_tracked_players',
-    db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
-    db.Column('canonical_player_id', db.Integer, db.ForeignKey('canonical_players.id'), primary_key=True)
-)
+class UserTrackedItem(db.Model):
+    __tablename__ = 'user_tracked_items'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    event_id = db.Column(db.Integer, db.ForeignKey('events.id'), nullable=False)
+
+    # Can track a team OR a player within an event. One will be null.
+    canonical_team_id = db.Column(db.Integer, db.ForeignKey('canonical_teams.id'), nullable=True)
+    canonical_player_id = db.Column(db.Integer, db.ForeignKey('canonical_players.id'), nullable=True)
+
+    tracked_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Define relationships to easily access the objects
+    user = db.relationship('User', back_populates='tracked_items')
+    event = db.relationship('Event')
+    team = db.relationship('CanonicalTeam')
+    player = db.relationship('CanonicalPlayer')
 
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
@@ -29,13 +37,8 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(120), index=True, unique=True, nullable=False)
     password_hash = db.Column(db.String(256))
 
-    tracked_teams = db.relationship(
-        'CanonicalTeam', secondary=user_tracked_teams, lazy='dynamic',
-        back_populates='tracked_by_users')
-
-    tracked_players = db.relationship(
-        'CanonicalPlayer', secondary=user_tracked_players, lazy='dynamic',
-        back_populates='tracked_by_users')
+    tracked_items = db.relationship('UserTrackedItem', back_populates='user', lazy='dynamic',
+                                    cascade="all, delete-orphan")
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -43,29 +46,42 @@ class User(UserMixin, db.Model):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
-    def is_tracking_team(self, team):
-        return self.tracked_teams.filter(
-            user_tracked_teams.c.canonical_team_id == team.id).count() > 0
+    def is_tracking(self, event, team=None, player=None):
+        """Checks if the user is tracking a specific item in a specific event."""
+        query = self.tracked_items.filter_by(event_id=event.id)
+        if team:
+            query = query.filter_by(canonical_team_id=team.id)
+        if player:
+            query = query.filter_by(canonical_player_id=player.id)
+        return query.count() > 0
 
-    def track_team(self, team):
-        if not self.is_tracking_team(team):
-            self.tracked_teams.append(team)
+    def track(self, event, team=None, player=None):
+        """Tracks a team or player for a specific event."""
+        if not self.is_tracking(event, team=team, player=player):
+            item = UserTrackedItem(
+                user_id=self.id,
+                event_id=event.id,
+                canonical_team_id=team.id if team else None,
+                canonical_player_id=player.id if player else None
+            )
+            db.session.add(item)
 
-    def untrack_team(self, team):
-        if self.is_tracking_team(team):
-            self.tracked_teams.remove(team)
+    def untrack(self, event, team=None, player=None):
+        """Untracks a team or player from a specific event."""
+        query = self.tracked_items.filter_by(event_id=event.id)
+        if team:
+            query = query.filter_by(canonical_team_id=team.id)
+        if player:
+            query = query.filter_by(canonical_player_id=player.id)
+        items_to_delete = query.all()
+        for item in items_to_delete:
+            db.session.delete(item)
 
-    def is_tracking_player(self, player):
-        return self.tracked_players.filter(
-            user_tracked_players.c.canonical_player_id == player.id).count() > 0
-
-    def track_player(self, player):
-        if not self.is_tracking_player(player):
-            self.tracked_players.append(player)
-
-    def untrack_player(self, player):
-        if self.is_tracking_player(player):
-            self.tracked_players.remove(player)
+    def untrack_item_by_id(self, item_id):
+        """Untracks an item by its specific tracking ID."""
+        item = self.tracked_items.filter_by(id=item_id).first()
+        if item:
+            db.session.delete(item)
 
     def __repr__(self):
         return f'<User {self.username}>'
@@ -95,6 +111,7 @@ class Event(db.Model):
     team_two = db.Column(db.String(50), nullable=False)
     last_updated = db.Column(db.DateTime, default=datetime.now(timezone.utc), nullable=False)
     start_time_datetime = db.Column(db.DateTime, index=True)
+    is_start_scheduled = db.Column(db.Boolean, default=False, nullable=False)
 
     league = relationship('League', back_populates='events')
     match = relationship('Match', back_populates='event', uselist=False, cascade="all, delete-orphan")
@@ -171,15 +188,8 @@ class GamePlayerPerformance(db.Model):
     team_id = db.Column(db.Integer, db.ForeignKey('gameteams.id'), nullable=False)
     canonical_player_id = db.Column(db.Integer, db.ForeignKey('canonical_players.id'), nullable=False)
     match_player_id = db.Column(db.Integer, db.ForeignKey('match_players.id'), nullable=False)
-    name = db.Column(db.String(50), nullable=False)
-    role = db.Column(db.String(50), nullable=False)
-    champion = db.Column(db.String(50), nullable=False)
-    gold = db.Column(db.Integer, nullable=False)
-    level = db.Column(db.Integer, nullable=False)
-    kills = db.Column(db.Integer, nullable=False)
-    deaths = db.Column(db.Integer, nullable=False)
-    assists = db.Column(db.Integer, nullable=False)
-    creeps = db.Column(db.Integer, nullable=False)
+
+    stats = db.Column(JSONB, nullable=False)
 
     match_player = relationship('MatchPlayer', back_populates='game_stats')
     canonical_player = relationship('CanonicalPlayer', back_populates='game_participations')
@@ -199,21 +209,6 @@ class CanonicalTeam(db.Model):
     canonical_players = relationship('CanonicalPlayer', back_populates='canonical_team')
     match_participations = relationship('MatchTeam', back_populates='canonical_team', cascade="all, delete-orphan")
     game_participations = relationship('GameTeam', back_populates='canonical_team', cascade="all, delete-orphan")
-    tracked_by_users = db.relationship(
-        'User', secondary=user_tracked_teams, lazy='dynamic',
-        back_populates='tracked_teams')
-
-    def get_latest_event(self):
-        # Query for the latest event, return an optimized query
-        latest_event = Event.query.join(Match).join(MatchTeam).filter(
-            MatchTeam.canonical_team_id == self.id
-        ).options(
-            joinedload(Event.match)
-            .joinedload(Match.games)
-            .joinedload(Game.gameTeams)
-            .joinedload(GameTeam.gamePlayers)
-        ).order_by(desc(Event.start_time_datetime)).first()
-        return latest_event
 
 class CanonicalPlayer(db.Model):
     __tablename__ = 'canonical_players'
@@ -230,17 +225,3 @@ class CanonicalPlayer(db.Model):
     canonical_team = relationship('CanonicalTeam', back_populates='canonical_players')
     match_participations = relationship('MatchPlayer', back_populates='canonical_player', cascade="all, delete-orphan")
     game_participations = relationship('GamePlayerPerformance', back_populates='canonical_player', cascade="all, delete-orphan")
-    tracked_by_users = db.relationship(
-        'User', secondary=user_tracked_players, lazy='dynamic',
-        back_populates='tracked_players')
-
-    def get_latest_event(self):
-        latest_event = Event.query.join(Match).join(MatchTeam).join(MatchPlayer).filter(
-            MatchPlayer.canonical_player_id == self.id
-        ).options(
-            joinedload(Event.match)
-            .joinedload(Match.games)
-            .joinedload(Game.gameTeams)
-            .joinedload(GameTeam.gamePlayers)
-        ).order_by(desc(Event.start_time_datetime)).first()
-        return latest_event

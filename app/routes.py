@@ -64,36 +64,17 @@ def logout():
 @login_required
 def dashboard():
     form = EmptyForm()
+    # Call the cached function to get all tracked items
+    all_tracked_items = get_dashboard_data(current_user.id)
 
-    # Retrieve info from cache
-    team_event_map, player_event_map = get_dashboard_data(current_user.id)
-
-    # Build the lists for the template using the pre-fetched data
-    tracked_teams_with_events = [
-        (team, team_event_map.get(team.id))
-        for team in current_user.tracked_teams
-    ]
-
-    tracked_players_with_events = [
-        (player, player_event_map.get(player.id))
-        for player in current_user.tracked_players
-    ]
-
-    # Unstarted events are first
-    def sort_key(item):
-        latest_event = item[1]
-        if not latest_event: return (2, None)
-        is_unstarted = 0 if latest_event.state == 'unstarted' else 1
-        return (is_unstarted, latest_event.start_time_datetime)
-
-    tracked_teams_with_events.sort(key=sort_key)
-    tracked_players_with_events.sort(key=sort_key)
+    # Separate the items into two lists for the template
+    tracked_teams = [item for item in all_tracked_items if item.team]
+    tracked_players = [item for item in all_tracked_items if item.player]
 
     return render_template('dashboard.html', title='Dashboard',
-                           tracked_teams=tracked_teams_with_events,
-                           tracked_players=tracked_players_with_events,
+                           tracked_teams=tracked_teams,
+                           tracked_players=tracked_players,
                            form=form)
-
 
 @current_app.route('/')
 def index():
@@ -124,65 +105,85 @@ def show_event(id):
     games_to_display = event.match.games
     return  render_template('match.html', title='Match Details', games=games_to_display, teams=teams_to_display, event=event, form=form)
 
-@current_app.route('/track_team/<int:team_id>', methods=['POST'])
+@current_app.route('/track_team/<int:team_id>/in_event/<int:event_id>', methods=['POST'])
 @login_required
-def track_team(team_id):
+def track_team(team_id, event_id):
     form = EmptyForm()
     if form.validate_on_submit():
         team = db.get_or_404(CanonicalTeam, team_id)
-        current_user.track_team(team)
+        event = db.get_or_404(Event, event_id)
+        current_user.track(event, team=team)
         db.session.commit()
         cache.delete_memoized(get_dashboard_data, current_user.id)
         return jsonify({'status': 'success', 'action': 'tracked', 'name': team.name})
     return jsonify({'status': 'error', 'message': 'Invalid request.'}), 400
 
-
-@current_app.route('/untrack_team/<int:team_id>', methods=['POST'])
+@current_app.route('/untrack_team/<int:team_id>/in_event/<int:event_id>', methods=['POST'])
 @login_required
-def untrack_team(team_id):
+def untrack_team(team_id, event_id):
     form = EmptyForm()
     if form.validate_on_submit():
         team = db.get_or_404(CanonicalTeam, team_id)
-        current_user.untrack_team(team)
+        event = db.get_or_404(Event, event_id)
+        current_user.untrack(event, team=team)
         db.session.commit()
-        cache.delete_memoized(get_dashboard_data, current_user.id)
-        return jsonify({'status': 'success', 'action': 'untracked', 'name': team.name})
+        cache.delete_memoized(get_dashboard_data, user_id=current_user.id)
+        return jsonify({'status': 'success'})
+    return jsonify({'status': 'error'}), 400
+
+
+@current_app.route('/untrack_item/<int:item_id>', methods=['POST'])
+@login_required
+def untrack_item(item_id):
+    form = EmptyForm()
+    if form.validate_on_submit():
+        current_user.untrack_item_by_id(item_id)
+        db.session.commit()
+        cache.delete_memoized(get_dashboard_data, user_id=current_user.id)
+        return jsonify({'status': 'success', 'message': 'Item untracked.'})
     return jsonify({'status': 'error', 'message': 'Invalid request.'}), 400
 
 
-@current_app.route('/track_player/<int:player_id>', methods=['POST'])
+@current_app.route('/track_player/<int:player_id>/in_event/<int:event_id>', methods=['POST'])
 @login_required
-def track_player(player_id):
+def track_player(player_id, event_id):
     form = EmptyForm()
     if form.validate_on_submit():
         player = db.get_or_404(CanonicalPlayer, player_id)
-        current_user.track_player(player)
+        event = db.get_or_404(Event, event_id)
+        current_user.track(event, player=player)
         db.session.commit()
         cache.delete_memoized(get_dashboard_data, current_user.id)
         return jsonify({'status': 'success', 'action': 'tracked', 'name': player.name})
     return jsonify({'status': 'error', 'message': 'Invalid request.'}), 400
 
-
-@current_app.route('/untrack_player/<int:player_id>', methods=['POST'])
+@current_app.route('/untrack_player/<int:player_id>/in_event/<int:event_id>', methods=['POST'])
 @login_required
-def untrack_player(player_id):
+def untrack_player(player_id, event_id):
     form = EmptyForm()
     if form.validate_on_submit():
         player = db.get_or_404(CanonicalPlayer, player_id)
-        current_user.untrack_player(player)
+        event = db.get_or_404(Event, event_id)
+        current_user.untrack(event, player=player)
         db.session.commit()
-        cache.delete_memoized(get_dashboard_data, current_user.id)
-        return jsonify({'status': 'success', 'action': 'untracked', 'name': player.name})
-    return jsonify({'status': 'error', 'message': 'Invalid request.'}), 400
+        cache.delete_memoized(get_dashboard_data, user_id=current_user.id)
+        return jsonify({'status': 'success'})
+    return jsonify({'status': 'error'}), 400
+
+
 
 @current_app.route('/untrack_all_teams', methods=['POST'])
 @login_required
 def untrack_all_teams():
     form = EmptyForm()
     if form.validate_on_submit():
-        current_user.tracked_teams = []
+        # Perform a bulk delete on UserTrackedItem records that are for teams
+        UserTrackedItem.query.filter_by(
+            user_id=current_user.id,
+            canonical_player_id=None  # Target team tracks
+        ).delete(synchronize_session=False)
         db.session.commit()
-        cache.delete_memoized(get_dashboard_data, current_user.id)
+        cache.delete_memoized(get_dashboard_data, user_id=current_user.id)
         flash('You are no longer tracking any teams.', 'info')
     return redirect(url_for('dashboard'))
 
@@ -191,8 +192,13 @@ def untrack_all_teams():
 def untrack_all_players():
     form = EmptyForm()
     if form.validate_on_submit():
-        current_user.tracked_players = []
+        # Perform a bulk delete on UserTrackedItem records that are for players
+        UserTrackedItem.query.filter_by(
+            user_id=current_user.id,
+            canonical_team_id=None  # Target player tracks
+        ).delete(synchronize_session=False)
+
         db.session.commit()
-        cache.delete_memoized(get_dashboard_data, current_user.id)
+        cache.delete_memoized(get_dashboard_data, user_id=current_user.id)
         flash('You are no longer tracking any players.', 'info')
     return redirect(url_for('dashboard'))

@@ -47,7 +47,8 @@ def update_leagues():
                     team_two=event.teams[1].get('name'),
                     league_id=league.id,
                     start_time_datetime= datetime.strptime(event.start_time, "%Y-%m-%dT%H:%M:%SZ").replace(
-                        tzinfo=timezone.utc)
+                        tzinfo=timezone.utc),
+                    is_start_scheduled = False
                 )
                 events_to_add.append(new_event)
         if events_to_add:
@@ -306,19 +307,21 @@ def populate_completed_events(self):
                                         continue
                                 db.session.flush()
                                 # Add a player's stats for a game and pair it to the MatchPlayer and CanonicalPlayer
-                                gpp = GamePlayerPerformance(
-                                    name=canonical_player_for_stats.name,
-                                    role=api_player_stats.role,
-                                    champion=api_player_stats.champion,
-                                    gold=api_player_stats.gold,
-                                    level=api_player_stats.level,
-                                    kills=api_player_stats.kills,
-                                    deaths=api_player_stats.deaths,
-                                    assists=api_player_stats.assists,
-                                    creeps=api_player_stats.creeps,
-                                    canonical_player_id=canonical_player_for_stats.id,
-                                    match_player_id=match_player_for_stats.id
-                                )
+                                player_stats_dict = {
+                                    'name': canonical_player_for_stats.name,
+                                    'role': api_player_stats.role,
+                                    'champion': api_player_stats.champion,
+                                    'gold': api_player_stats.gold,
+                                    'level': api_player_stats.level,
+                                    'kills': api_player_stats.kills,
+                                    'deaths': api_player_stats.deaths,
+                                    'assists': api_player_stats.assists,
+                                    'creeps': api_player_stats.creeps
+                                }
+                                gpp = GamePlayerPerformance(stats=player_stats_dict,
+                                                            canonical_player_id=canonical_player_for_stats.id,
+                                                            match_player_id=match_player_for_stats.id
+                                                            )
                                 match_player = match_player_for_stats if match_player_for_stats else None
                                 if hasattr(game_team, 'gamePlayers'): game_team.gamePlayers.append(gpp)
                                 if hasattr(canonical_player_for_stats,
@@ -404,7 +407,10 @@ def get_or_create_player(cur_team, player):
         cur_team.canonical_team.league,
         team_to_associate_if_new=cur_team.canonical_team
     )
-    cur_player = GamePlayerPerformance.query.filter_by(name=canonical_player.name, team_id=cur_team.id).first()
+    cur_player = GamePlayerPerformance.query.filter(
+        GamePlayerPerformance.stats['name'].astext == canonical_player.name,
+        GamePlayerPerformance.team_id == cur_team.id
+    ).first()
     if not cur_player:
         # Find the canonical player
         player_data_for_creation = {
@@ -433,33 +439,35 @@ def get_or_create_player(cur_team, player):
             m_player.match_team = m_team
             m_player.canonical_player = canonical_player
             db.session.add(m_player)
-        cur_player = GamePlayerPerformance(
-            name=canonical_player.name,
-            role=player.role,
-            champion=player.champion,
-            gold=player.gold,
-            level=player.level,
-            kills=player.kills,
-            deaths=player.deaths,
-            assists=player.assists,
-            creeps=player.creeps,
-            canonical_player_id=canonical_player.id,
-            match_player_id=m_player.id
-        )
+        player_stats_dict = {
+            'name': canonical_player.name,
+            'role': player.role,
+            'champion': player.champion,
+            'gold': player.gold,
+            'level': player.level,
+            'kills': player.kills,
+            'deaths': player.deaths,
+            'assists': player.assists,
+            'creeps': player.creeps
+        }
+        cur_player = GamePlayerPerformance(stats=player_stats_dict,
+                                    canonical_player_id=canonical_player.id,
+                                    match_player_id=m_player.id
+                                    )
         cur_team.gamePlayers.append(cur_player)
         canonical_player.game_participations.append(cur_player)
         m_player.game_stats.append(cur_player)
         db.session.add(cur_player)
     else:
         # else, just update the current player's stats
-        cur_player.role = player.role
-        cur_player.champion = player.champion
-        cur_player.gold = player.gold
-        cur_player.level = player.level
-        cur_player.kills = player.kills
-        cur_player.deaths = player.deaths
-        cur_player.assists = player.assists
-        cur_player.creeps = player.creeps
+        cur_player.stats['role'] = player.role
+        cur_player.stats['champion'] = player.champion
+        cur_player.stats['gold'] = player.gold
+        cur_player.stats['level'] = player.level
+        cur_player.stats['kills'] = player.kills
+        cur_player.stats['deaths'] = player.deaths
+        cur_player.stats['assists'] = player.assists
+        cur_player.stats['creeps'] = player.creeps
     return cur_player
 
 @celery.task(bind=True)
@@ -483,11 +491,11 @@ def update_in_progress_match(self, event_id):
                         cur_player = get_or_create_player(cur_team, player)
 
             # Now, check the state to decide what to do next
+            invalidate_caches_for_live_games()  # Your function to clear user caches
             if match_details.state == 'completed':
                 current_app.logger.info(f"Match {event.match_id} has completed. Stopping polling.")
 
                 # Perform final actions
-                invalidate_caches_for_live_games()  # Your function to clear user caches
                 event.state = 'completed'
                 db.session.commit()
 
@@ -554,11 +562,15 @@ def cleanup_unused_match_players():
 @celery.task(bind=True)
 # Finds all users tracking any live game and clear their dashboard cache
 def invalidate_caches_for_live_games(self):
+    """
+    Finds all users tracking any live game and clears their dashboard cache.
+    This version is updated to use the UserTrackedItem model.
+    """
     with current_app.app_context():
-        try:
-            current_app.logger.info("SCHEDULER: Running job to invalidate caches for live games.")
+        current_app.logger.info("SCHEDULER: Running job to invalidate caches for live games.")
 
-            # Query all events in progress
+        try:
+            # Step 1: Find all 'inProgress' event IDs. This is a fast query.
             live_event_ids_query = db.session.query(Event.id).filter(Event.state == 'inProgress')
             live_event_ids = {row.id for row in live_event_ids_query}
 
@@ -566,41 +578,28 @@ def invalidate_caches_for_live_games(self):
                 current_app.logger.info("SCHEDULER: No live games found. No caches to invalidate.")
                 return
 
-            # Query all users that are tracking the team
-            users_tracking_live_teams_query = db.session.query(user_tracked_teams.c.user_id).join(
-                MatchTeam, user_tracked_teams.c.canonical_team_id == MatchTeam.canonical_team_id
-            ).join(
-                Match, MatchTeam.match_id == Match.id
-            ).filter(Match.event_id.in_(live_event_ids)).distinct()
+            # Step 2: Find all unique user IDs who are tracking one of the live events.
+            # This is much simpler with the new model.
+            user_ids_to_invalidate_query = db.session.query(UserTrackedItem.user_id).filter(
+                UserTrackedItem.event_id.in_(live_event_ids)
+            ).distinct()
 
-            user_ids_to_invalidate = {row.user_id for row in users_tracking_live_teams_query}
-
-            # Query all users that are tracking the player
-            users_tracking_live_players_query = db.session.query(user_tracked_players.c.user_id).join(
-                MatchPlayer, user_tracked_players.c.canonical_player_id == MatchPlayer.canonical_player_id
-            ).join(
-                MatchTeam, MatchPlayer.match_team_id == MatchTeam.id
-            ).join(
-                Match, MatchTeam.match_id == Match.id
-            ).filter(Match.event_id.in_(live_event_ids)).distinct()
-
-            user_ids_to_invalidate.update(row.user_id for row in users_tracking_live_players_query)
+            user_ids_to_invalidate = {row.user_id for row in user_ids_to_invalidate_query}
 
             if not user_ids_to_invalidate:
                 current_app.logger.info("SCHEDULER: No users are tracking the current live games.")
-                # Stop running script
-                # job_id = f"update_invalidate_caches_for_live_games"
-                # scheduler.remove_job(id=job_id)
                 return
 
-            current_app.logger.info(f"SCHEDULER: Found {len(user_ids_to_invalidate)} users whose cache needs to be invalidated.")
+            current_app.logger.info(
+                f"SCHEDULER: Found {len(user_ids_to_invalidate)} users whose cache needs to be invalidated.")
             for user_id in user_ids_to_invalidate:
-                invalidate_dashboard_cache(user_id)
-        except OperationalError as exc:
-            raise self.retry(exc=exc, countdown=60, max_retries=3)
-        except Exception as exc:
-            current_app.logger.error("NONOperationalError Exception")
-            raise
+                cache.delete_memoized(get_dashboard_data, user_id=user_id)
+                current_app.logger.debug(f"SCHEDULER: Deleted dashboard cache for user {user_id}")
+
+        except Exception as e:
+            # It's good practice to log any errors that occur in a background task
+            current_app.logger.error(f"An error occurred during cache invalidation: {e}", exc_info=True)
+
 
 @celery.task(bind=True)
 def check_in_progress(self):
@@ -668,17 +667,23 @@ def start_match_polling_chain(self, event_id):
 @celery.task(bind=True)
 # Updates TBD teams and then schedules live tracking for events that are about to start.
 def process_unstarted_events(self):
+    """
+    Runs periodically (e.g., every hour) to update TBD events and schedule
+    start-time jobs for newly resolved or discovered events.
+    """
     with current_app.app_context():
         try:
             now = datetime.now(timezone.utc)
             current_app.logger.info(f"SCHEDULER: Running job to process unstarted events at {now.isoformat()}")
 
-            unstarted_events = Event.query.filter_by(state='unstarted').all()
+            # --- Step 1: Update TBD Events (Same as before) ---
+            tbd_events = Event.query.filter(
+                Event.state == 'unstarted',
+                db.or_(Event.team_one == 'TBD', Event.team_two == 'TBD')
+            ).all()
 
-            # Update events with TBD teams
-            tbd_events = [e for e in unstarted_events if e.team_one == 'TBD' or e.team_two == 'TBD']
             if tbd_events:
-                current_app.logger.info(f"Found {len(tbd_events)} unstarted events with TBD teams to update.")
+                current_app.logger.info(f"Found {len(tbd_events)} TBD events to update.")
                 for event in tbd_events:
                     try:
                         update_TBD_event(event.id)
@@ -687,25 +692,47 @@ def process_unstarted_events(self):
                         db.session.rollback()
                 db.session.commit()
 
-            events_to_check = [e for e in unstarted_events if e.team_one != 'TBD' and e.team_two != 'TBD']
+            # --- Step 2: Schedule Start Jobs for New/Resolved Events ---
+            # Find events that have resolved teams but haven't had their start job scheduled yet.
+            events_to_schedule = Event.query.filter(
+                Event.state == 'unstarted',
+                Event.is_start_scheduled == False,
+                Event.team_one != 'TBD',
+                Event.team_two != 'TBD'
+            ).all()
 
-            for event in events_to_check:
+            if not events_to_schedule:
+                current_app.logger.info("No new events to schedule.")
+                return
+
+            current_app.logger.info(f"Found {len(events_to_schedule)} new/resolved events to schedule.")
+            for event in events_to_schedule:
                 if not event.start_time_datetime:
-                    try:
-                        event.start_time_datetime = datetime.strptime(event.start_time, "%Y-%m-%dT%H:%M:%SZ").replace(
-                            tzinfo=timezone.utc)
-                    except (ValueError, TypeError):
-                        current_app.logger.warning(f"Could not parse start_time for Event {event.id}. Skipping start check.")
-                        continue
+                    # Skip if there's no valid start time yet
+                    continue
 
-                if event.start_time_datetime.replace(tzinfo=timezone.utc) <= now:
-                    start_match_polling_chain.delay(event.id)
+                # The 'if event.start_time_datetime > now:' check has been removed.
+                # Celery will now schedule the task to run immediately if the ETA is in the past.
+                current_app.logger.info(
+                    f"Scheduling start task for Event {event.id} at {event.start_time_datetime.isoformat()}")
 
-            current_app.logger.info("SCHEDULER: Finished processing unstarted events.")
+                # Use apply_async with an ETA to schedule the task for the exact start time
+                start_match_polling_chain.apply_async(
+                    args=[event.id],
+                    eta=event.start_time_datetime
+                )
+
+                # Mark this event as scheduled to prevent re-scheduling
+                event.is_start_scheduled = True
+
+            # Commit the changes (setting is_start_scheduled to True)
+            db.session.commit()
+            current_app.logger.info("Finished scheduling start jobs.")
+
         except OperationalError as exc:
             raise self.retry(exc=exc, countdown=60, max_retries=3)
         except Exception as exc:
-            current_app.logger.error("NONOperationalError Exception")
+            current_app.logger.error(f"An unexpected error occurred in process_unstarted_events: {exc}", exc_info=True)
             raise
 
 # --- Stage 1 Task ---
@@ -752,7 +779,8 @@ def seed_events_for_league_task(league_id):
             team_two=event_data.teams[1].get('name'),
             league_id=league.id,
             start_time_datetime=datetime.strptime(event_data.start_time, "%Y-%m-%dT%H:%M:%SZ").replace(
-                tzinfo=timezone.utc)
+                tzinfo=timezone.utc),
+            is_start_scheduled = False
         )
         to_add.append(new_event)
 
@@ -884,19 +912,22 @@ def seed_match_for_event_task(self, event_id):
                                 continue
                         db.session.flush()
                         # Add a player's stats for a game and pair it to the MatchPlayer and CanonicalPlayer
-                        gpp = GamePlayerPerformance(
-                            name=canonical_player_for_stats.name,
-                            role=api_player_stats.role,
-                            champion=api_player_stats.champion,
-                            gold=api_player_stats.gold,
-                            level=api_player_stats.level,
-                            kills=api_player_stats.kills,
-                            deaths=api_player_stats.deaths,
-                            assists=api_player_stats.assists,
-                            creeps=api_player_stats.creeps,
-                            canonical_player_id=canonical_player_for_stats.id,
-                            match_player_id=match_player_for_stats.id
-                        )
+
+                        player_stats_dict = {
+                            'name': canonical_player_for_stats.name,
+                            'role': api_player_stats.role,
+                            'champion': api_player_stats.champion,
+                            'gold': api_player_stats.gold,
+                            'level': api_player_stats.level,
+                            'kills': api_player_stats.kills,
+                            'deaths': api_player_stats.deaths,
+                            'assists': api_player_stats.assists,
+                            'creeps': api_player_stats.creeps
+                        }
+                        gpp = GamePlayerPerformance(stats=player_stats_dict,
+                                                    canonical_player_id=canonical_player_for_stats.id,
+                                                    match_player_id=match_player_for_stats.id
+                                                    )
                         match_player = match_player_for_stats if match_player_for_stats else None
                         if hasattr(game_team, 'gamePlayers'): game_team.gamePlayers.append(gpp)
                         if hasattr(canonical_player_for_stats,
