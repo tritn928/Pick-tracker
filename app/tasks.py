@@ -368,6 +368,7 @@ def kick_off_league_update_workflow(self):
 def get_or_create_game(cur_match, game_id):
     cur_game = Game.query.filter_by(game_id=game_id, match_id=cur_match.id).first()
     if not cur_game:
+        current_app.logger.info("Found no Game")
         cur_game = Game(
             game_id=game_id
         )
@@ -477,11 +478,12 @@ def update_in_progress_match(self, event_id):
 
             for game in match_details.games:
                 cur_game = get_or_create_game(cur_match, game.id)
-                current_app.logger.info("found game or created game")
                 for team in game.teams:
                     cur_team = get_or_create_game_team(cur_game, team.team_id)
                     for player in team.players:
                         cur_player = get_or_create_player(cur_team, player)
+                        current_app.logger.info("found player or created player")
+                        current_app.logger.info(f"{cur_player.name}: {cur_player.kills}/{cur_player.deaths}/{cur_player.assists}")
 
             # Now, check the state to decide what to do next
             if match_details.state == 'completed':
