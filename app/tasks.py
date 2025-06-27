@@ -477,6 +477,7 @@ def update_in_progress_match(self, event_id):
 
             for game in match_details.games:
                 cur_game = get_or_create_game(cur_match, game.id)
+                current_app.logger.info("found game or created game")
                 for team in game.teams:
                     cur_team = get_or_create_game_team(cur_game, team.team_id)
                     for player in team.players:
