@@ -1,6 +1,7 @@
 import requests
 import requests.packages
-from lolesports_api.models import Result, Schedule, Match
+
+from lolesports_api.models import Result, Schedule, Match, Event
 from typing import List, Dict
 from datetime import datetime, timedelta, timezone
 
@@ -94,9 +95,8 @@ class RestAdapter:
             if response.status_code == 404:
                 print("***************************NO LIVE STATS****************************************")
                 return
-            game.update_from_frame(response.json()['frames'][-1])
+            game.update_from_frame(response.json())
         match_details.update_state()
-
 
     def get_live(self) -> Schedule:
         params = {'hl': 'en-US'}
@@ -118,3 +118,13 @@ class RestAdapter:
         if response.status_code != 200:
             print("could not get teams")
         return response.data.get('data').get('teams')
+
+    def update_match_state(self, match:Match):
+        params = {'hl': 'en-US', 'id': match.match_id}
+        response = self.get('persisted/gw/getEventDetails', ep_params=params)
+        if response.status_code != 200 or response.data.get('data').get('event') is None:
+            print("Could not find match")
+            return
+        data = response.data.get('data').get('event').get('match')
+        if data['games'][-1]['state'] == 'completed' or data['games'][-1]['state'] == 'unneeded' or data['games'][-1]['state'] == 'finished':
+            match.state = 'completed'

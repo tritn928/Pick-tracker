@@ -14,16 +14,10 @@ class Event:
         self.endpoint = endpoint
         self.start_time = start_time
         self.state = state
-        self.teams = teams if teams else []
         self.home_id = teams['home']['team']['id']
         self.home_name = teams['home']['team']['name']
         self.away_name = teams['away']['team']['name']
         self.away_id = teams['away']['team']['id']
-
-    def update(self, data: Dict):
-        data = data['dates'][0]['games'][0]
-        self.state = data['status']['abstractGameState']
-        # Can add a winner later
 
     def __str__(self):
         return f"{self.home_name}({self.home_id}) vs {self.away_name}({self.away_id}) at {self.start_time}, pk: {self.id}, state: {self.state}, link: {self.endpoint}"
@@ -41,7 +35,7 @@ class Schedule:
                     game['gamePk'],
                     game['link'],
                     game['gameDate'],
-                    game['status']['abstractGameState'],
+                    game['status']['abstractGameCode'],
                     game['teams']
                 ))
 
@@ -120,15 +114,23 @@ class Match:
                     else:
                         self.players.get(player_data['person']['id']).update(player_data)
 
-    def __init__(self, match_id: int, event:Event, boxscore: Dict):
+    def __init__(self, match_id: int, data:Dict):
         self.id = match_id
+        self.home_team = None
+        self.away_team = None
+        self.state = data['dates'][0]['games'][0]['status']['abstractGameState']
+
+    def create_teams(self, boxscore:Dict):
         self.home_team = self.Team(boxscore['home']['team']['name'], boxscore['home']['team']['id'], boxscore['home'])
         self.away_team = self.Team(boxscore['away']['team']['name'], boxscore['away']['team']['id'], boxscore['away'])
-        self.event = event
+        self.update_from_boxscore(boxscore)
 
     def update_from_boxscore(self, boxscore:Dict):
         self.home_team.update_players(boxscore['home'])
         self.away_team.update_players(boxscore['away'])
+
+    def update_from_state(self, data:Dict):
+        self.state = data['dates'][0]['games'][0]['status']['abstractGameState']
 
     def __str__(self):
         ret = f"{self.home_team.name} vs {self.away_team.name}\n"

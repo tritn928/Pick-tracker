@@ -41,24 +41,27 @@ class RestAdapter:
         else:
             raise Exception(r.status_code)
 
-    def get_match(self, match_id: int, event:Event) -> Match:
-        boxscore =    self.get_boxscore(match_id)
-        return Match(match_id, event, boxscore)
-
     def update_match(self, match:Match):
         boxscore = self.get_boxscore(match.id)
         match.update_from_boxscore(boxscore)
+        match.update_from_state(self.get_match_state(match.id))
 
-    def update_event(self, event: Event):
+    def get_match_state(self, match_id:int):
         params = {'sportId': 1,
                   'usingPrivateEndpoint': False,
-                  'gamePk': event.id
+                  'gamePk': match_id
                   }
         r = self.get("/api/v1/schedule", ep_params=params)
         if r.status_code == 200:
-            event.update(r.data)
+            return r.data
         else:
             raise Exception(r.status_code)
+
+    def get_match(self, match_id: int) -> Match:
+        match = Match(match_id, self.get_match_state(match_id))
+        boxscore = self.get_boxscore(match_id)
+        match.create_teams(boxscore)
+        return match
 
 
 

@@ -84,18 +84,20 @@ class Game:
         self.participants = {}
 
     def populate(self, data):
-        self.blue_team = self.TeamStats(id=data['gameMetadata']['blueTeamMetadata']['esportsTeamId'],
-                                        totalGold=data['frames'][-1]['blueTeam']['totalGold'],
-                                        inhibitors=data['frames'][-1]['blueTeam']['inhibitors'],
-                                        towers=data['frames'][-1]['blueTeam']['towers'],
-                                        barons=data['frames'][-1]['blueTeam']['barons'],
-                                        totalKills=data['frames'][-1]['blueTeam']['totalKills'])
-        self.red_team = self.TeamStats(id=data['gameMetadata']['redTeamMetadata']['esportsTeamId'],
-                                        totalGold=data['frames'][-1]['redTeam']['totalGold'],
-                                        inhibitors=data['frames'][-1]['redTeam']['inhibitors'],
-                                        towers=data['frames'][-1]['redTeam']['towers'],
-                                        barons=data['frames'][-1]['redTeam']['barons'],
-                                        totalKills=data['frames'][-1]['redTeam']['totalKills'])
+        if data['frames'][-1]['blueTeam'] is not None:
+            self.blue_team = self.TeamStats(id=data['gameMetadata']['blueTeamMetadata']['esportsTeamId'],
+                                            totalGold=data['frames'][-1]['blueTeam']['totalGold'],
+                                            inhibitors=data['frames'][-1]['blueTeam']['inhibitors'],
+                                            towers=data['frames'][-1]['blueTeam']['towers'],
+                                            barons=data['frames'][-1]['blueTeam']['barons'],
+                                            totalKills=data['frames'][-1]['blueTeam']['totalKills'])
+        if data['frames'][-1]['redTeam'] is not None:
+            self.red_team = self.TeamStats(id=data['gameMetadata']['redTeamMetadata']['esportsTeamId'],
+                                            totalGold=data['frames'][-1]['redTeam']['totalGold'],
+                                            inhibitors=data['frames'][-1]['redTeam']['inhibitors'],
+                                            towers=data['frames'][-1]['redTeam']['towers'],
+                                            barons=data['frames'][-1]['redTeam']['barons'],
+                                            totalKills=data['frames'][-1]['redTeam']['totalKills'])
         for i in range(0, 5):
             self.participants[i+1] = self.PlayerStats(p_id=i+1,
                                                     id=data['gameMetadata']['blueTeamMetadata']['participantMetadata'][i]['esportsPlayerId'],
@@ -105,31 +107,37 @@ class Game:
 
         for i in range(0, 5):
             self.participants[i+6] = self.PlayerStats(p_id=i+6,
-                                                    id=data['gameMetadata']['redTeamMetadata']['participantMetadata'][i-1]['esportsPlayerId'],
-                                                    name=data['gameMetadata']['redTeamMetadata']['participantMetadata'][i-1]['summonerName'],
-                                                    champion=data['gameMetadata']['redTeamMetadata']['participantMetadata'][i-1]['championId'],
-                                                    role=data['gameMetadata']['redTeamMetadata']['participantMetadata'][i-1]['role'])
-        self.update_from_frame(data['frames'][-1])
+                                                    id=data['gameMetadata']['redTeamMetadata']['participantMetadata'][i]['esportsPlayerId'],
+                                                    name=data['gameMetadata']['redTeamMetadata']['participantMetadata'][i]['summonerName'],
+                                                    champion=data['gameMetadata']['redTeamMetadata']['participantMetadata'][i]['championId'],
+                                                    role=data['gameMetadata']['redTeamMetadata']['participantMetadata'][i]['role'])
+        self.update_from_frame(data)
 
     def update_from_frame(self, frame):
-        self.blue_team.totalGold = frame['blueTeam']['totalGold']
-        self.blue_team.inhibitors = frame['blueTeam']['inhibitors']
-        self.blue_team.towers = frame['blueTeam']['towers']
-        self.blue_team.barons = frame['blueTeam']['barons']
-        self.blue_team.totalKills = frame['blueTeam']['totalKills']
-        for i in range(0,5):
-            self.participants[i+1].update(frame['blueTeam']['participants'][i])
+        if self.blue_team is None:
+            self.populate(frame)
+        else:
+            frame = frame['frames'][-1]
+            self.blue_team.totalGold = frame['blueTeam']['totalGold']
+            self.blue_team.inhibitors = frame['blueTeam']['inhibitors']
+            self.blue_team.towers = frame['blueTeam']['towers']
+            self.blue_team.barons = frame['blueTeam']['barons']
+            self.blue_team.totalKills = frame['blueTeam']['totalKills']
 
-        self.red_team.totalGold = frame['redTeam']['totalGold']
-        self.red_team.inhibitors = frame['redTeam']['inhibitors']
-        self.red_team.towers = frame['redTeam']['towers']
-        self.red_team.barons = frame['redTeam']['barons']
-        self.red_team.totalKills = frame['redTeam']['totalKills']
-        for i in range(0,5):
-            self.participants[i+6].update(frame['redTeam']['participants'][i])
+            for i in range(0,5):
+                self.participants[i+1].update(frame['blueTeam']['participants'][i])
 
-        if frame['gameState'] == 'finished':
-            self.state = 'completed'
+            self.red_team.totalGold = frame['redTeam']['totalGold']
+            self.red_team.inhibitors = frame['redTeam']['inhibitors']
+            self.red_team.towers = frame['redTeam']['towers']
+            self.red_team.barons = frame['redTeam']['barons']
+            self.red_team.totalKills = frame['redTeam']['totalKills']
+
+            for i in range(0,5):
+                self.participants[i+6].update(frame['redTeam']['participants'][i])
+
+            if frame['gameState'] != 'paused':
+                self.state = frame['gameState']
 
 
 
@@ -151,17 +159,17 @@ class Match:
     def update_state(self):
         if self.games[0].state == 'unstarted':
             self.state = 'unstarted'
-        elif self.games[-1].state == 'completed' or self.games[-1].state == 'unneeded':
+        elif self.games[-1].state == 'completed' or self.games[-1].state == 'unneeded' or self.games[-1].state == 'finished':
             self.state = 'completed'
         else:
             self.state = 'inProgress'
 
     def create_games(self, data):
         for game in data:
-            self.games.append(Game(game_id=game.get('id'), state=game.get('state'), number=game.get('number')))
+            self.games.append(Game(game_id=game['id'], state=game['state'], number=game['number']))
 
     def get_active_game(self):
         for game in self.games:
-            if game.state == 'inProgress' or game.state == 'unstarted':
+            if game.state == 'inProgress' or game.state == 'unstarted' or game.state == 'paused' or game.state == 'in_game':
                 return game
         return None
