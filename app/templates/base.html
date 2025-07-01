@@ -75,7 +75,7 @@
                     }, 1000);
                 },
                 update() {
-                    let date = new Date(this.expiry.replace('Z', ''));
+                    let date = new Date(this.expiry);
                     let now = new Date();
                     let diff = date.getTime() - now.getTime();
 
