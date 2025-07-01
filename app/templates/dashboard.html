@@ -1,188 +1,148 @@
 {% extends "base.html" %}
 
 {% block content %}
-    <div class="bg-white dark:bg-slate-800 shadow-md rounded-lg p-6">
-        <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
-            <h1 class="text-2xl font-bold">Welcome, <span class="text-blue-500">{{ current_user.username }}</span>!</h1>
+<div class="bg-white dark:bg-slate-800 shadow-md rounded-lg p-6">
+    <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
+        <h1 class="text-2xl font-bold">Welcome, <span class="text-blue-500">{{ current_user.username }}</span>!</h1>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <!-- Column for Tracked Teams -->
+        <div>
+            <div class="flex justify-between items-center border-b-2 border-slate-200 dark:border-slate-700 pb-2 mb-4">
+                <h2 class="text-xl font-semibold text-slate-700 dark:text-slate-200">Tracked Teams</h2>
+                {% if tracked_teams %}
+                <form action="{{ url_for('untrack_all_teams') }}" method="post">
+                    {{ form.hidden_tag() }}
+                    <button type="submit" class="bg-red-800 hover:bg-red-700 text-white font-semibold py-1 px-3 text-xs rounded-md transition">Untrack All</button>
+                </form>
+                {% endif %}
+            </div>
+            <div class="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4 min-h-[200px]">
+                {% if tracked_teams %}
+                    <ul class="space-y-3">
+                        {% for item in tracked_teams %}
+                        <li class="bg-slate-200 dark:bg-slate-700/60 rounded-md p-3" data-item-id="{{ item.id }}" data-sport-name="{{ item.event.league.sport.name }}">
+                            {% include 'partials/_dashboard_item.html' %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="text-slate-500 dark:text-slate-400">You are not tracking any teams yet.</p>
+                {% endif %}
+            </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <!-- Column for Tracked Teams -->
-            <div>
-                <div class="flex justify-between items-center border-b-2 border-slate-200 dark:border-slate-700 pb-2 mb-4">
-                    <h2 class="text-xl font-semibold text-slate-700 dark:text-slate-200">Tracked Teams</h2>
-                    {% if tracked_teams %}
-                    <form action="{{ url_for('untrack_all_teams') }}" method="post">
-                        {{ form.hidden_tag() }}
-                        <button type="submit" class="bg-red-800 hover:bg-red-700 text-white font-semibold py-1 px-3 text-xs rounded-md transition duration-150 ease-in-out">Untrack All</button>
-                    </form>
-                    {% endif %}
-                </div>
-                <div class="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4 min-h-[200px]">
-                    {% if tracked_teams %}
-                        <ul class="space-y-3">
-                            {% for item in tracked_teams %}
-                            {# 'item' is a UserTrackedItem object #}
-                            <li class="bg-slate-200 dark:bg-slate-700/60 rounded-md">
-                                {% if item.event and item.event.state in ['inProgress', 'completed'] %}
-                                    <div x-data="{ open: false }">
-                                        <button @click="open = !open" class="w-full flex justify-between items-center p-3 text-left">
-                                            <div class="flex items-center">
-                                                <img src="{{ item.team.image or 'https://placehold.co/40x40/334155/e2e8f0?text=?' }}" alt="{{ item.team.name }} Logo" class="h-8 w-8 rounded-full object-cover mr-3">
-                                                <span class="font-bold text-slate-700 dark:text-slate-200">{{ item.team.name }}</span>
-                                            </div>
-                                            <svg class="w-5 h-5 text-slate-500 transform transition-transform" :class="{'rotate-180': open}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                                        </button>
-                                        <div x-show="open" x-transition class="p-3 border-t border-slate-300 dark:border-slate-600">
-                                            <p class="text-sm text-slate-600 dark:text-slate-300"><strong>Event:</strong> {{ item.event.team_one }} vs {{ item.event.team_two }}</p>
-                                            <p class="text-sm text-slate-500 dark:text-slate-400"><strong>Status:</strong> <span class="font-semibold">{{ item.event.state }}</span></p>
-                                            <div class="mt-4 space-y-4">
-                                                {% for game in item.event.match.games %}
-                                                <div class="border-t border-slate-300 dark:border-slate-600 pt-2">
-                                                     <h4 class="text-sm font-bold text-slate-600 dark:text-slate-400 mb-2">Game {{ loop.index }} Stats:</h4>
-                                                     <div class="grid grid-cols-2 gap-x-4">
-                                                        {% if game.gameTeams and game.gameTeams|length >= 2 %}
-                                                        <div class="p-2 {% if game.gameTeams[0].team_name == item.team.name %}bg-blue-900/60 rounded-md{% endif %}">
-                                                            <h5 class="text-xs font-semibold text-center mb-1 {% if game.gameTeams[0].team_name == item.team.name %}text-white{% endif %}">{{ game.gameTeams[0].team_name }}</h5>
-                                                            <table class="w-full text-xs text-center text-slate-500 dark:text-slate-400"><tbody>
-                                                                {% for player_stat in game.gameTeams[0].gamePlayers %}
-                                                                    <tr class="border-b border-slate-700"><td class="py-2 px-1 text-center">{{ player_stat.stats.get('name', 'N/A') }}</td><td class="py-2 px-1 text-center">{{ player_stat.stats.get('role', 'N/A') }}</td><td class="py-2 px-1 text-center">{{ player_stat.stats.get('kills', -1) }}/{{ player_stat.stats.get('deaths', -1) }}/{{ player_stat.stats.get('assists', -1) }}</td></tr>
-                                                                {% endfor %}
-                                                            </tbody></table>
-                                                        </div>
-                                                        <div class="p-2 {% if game.gameTeams[1].team_name == item.team.name %}bg-blue-900/60 rounded-md{% else %}border-l border-slate-300 dark:border-slate-600{% endif %}">
-                                                            <h5 class="text-xs font-semibold text-center mb-1 {% if game.gameTeams[1].team_name == item.team.name %}text-white{% endif %}">{{ game.gameTeams[1].team_name }}</h5>
-                                                             <table class="w-full text-xs text-center text-slate-500 dark:text-slate-400"><tbody>
-                                                                {% for player_stat in game.gameTeams[1].gamePlayers %}
-                                                                    <tr class="border-b border-slate-700"><td class="py-2 px-1 text-center">{{ player_stat.stats.get('name', 'N/A') }}</td><td class="py-2 px-1 text-center">{{ player_stat.stats.get('role', 'N/A') }}</td><td class="py-2 px-1 text-center">{{ player_stat.stats.get('kills', -1) }}/{{ player_stat.stats.get('deaths', -1) }}/{{ player_stat.stats.get('assists', -1) }}</td></tr>
-                                                                {% endfor %}
-                                                            </tbody></table>
-                                                        </div>
-                                                        {% endif %}
-                                                     </div>
-                                                </div>
-                                                {% endfor %}
-                                            </div>
-                                            <div class="flex justify-end items-center mt-3">
-                                                 <button type="button" @click="handleTrackRequest('{{ url_for('untrack_item', item_id=item.id) }}').then(success => { if(success) $el.closest('li').remove(); })" class="bg-slate-600 hover:bg-red-600 text-white font-semibold py-1 px-3 text-xs rounded-md transition">Untrack</button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                {% else %}
-                                    <div x-data class="p-3">
-                                        <div class="flex justify-between items-center">
-                                            <div class="flex items-center">
-                                                <img src="{{ item.team.image or 'https://placehold.co/40x40/334155/e2e8f0?text=?' }}" alt="{{ item.team.name }} Logo" class="h-8 w-8 rounded-full object-cover mr-3">
-                                                <span class="font-bold text-slate-700 dark:text-slate-200">{{ item.team.name }}</span>
-                                            </div>
-                                             <button type="button" @click="handleTrackRequest('{{ url_for('untrack_item', item_id=item.id) }}').then(success => { if(success) $el.closest('li').remove(); })" class="bg-slate-600 hover:bg-red-600 text-white font-semibold py-1 px-3 text-xs rounded-md transition">Untrack</button>
-                                        </div>
-                                        {% if item.event %}
-                                            <div class="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                                                <p><strong>Event:</strong> {{ item.event.team_one }} vs {{ item.event.team_two }}</p>
-                                                <p><strong>Status:</strong> <span class="font-semibold">{{ item.event.state }}</span></p>
-                                                <a href="{{ url_for('show_event', id=item.event.id) }}" class="inline-block mt-2 text-blue-500 hover:text-blue-400 font-semibold">View Match Details &rarr;</a>
-                                            </div>
-                                        {% endif %}
-                                    </div>
-                                {% endif %}
-                            </li>
-                            {% endfor %}
-                        </ul>
-                    {% else %}
-                        <p class="text-slate-500 dark:text-slate-400">You are not tracking any teams yet.</p>
-                    {% endif %}
-                </div>
+        <!-- Column for Tracked Players -->
+        <div>
+            <div class="flex justify-between items-center border-b-2 border-slate-200 dark:border-slate-700 pb-2 mb-4">
+                <h2 class="text-xl font-semibold text-slate-700 dark:text-slate-200">Tracked Players</h2>
+                {% if tracked_players %}
+                <form action="{{ url_for('untrack_all_players') }}" method="post">
+                    {{ form.hidden_tag() }}
+                    <button type="submit" class="bg-red-800 hover:bg-red-700 text-white font-semibold py-1 px-3 text-xs rounded-md transition">Untrack All</button>
+                </form>
+                {% endif %}
             </div>
-
-            <!-- Column for Tracked Players -->
-            <div>
-                <div class="flex justify-between items-center border-b-2 border-slate-200 dark:border-slate-700 pb-2 mb-4">
-                    <h2 class="text-xl font-semibold text-slate-700 dark:text-slate-200">Tracked Players</h2>
-                    {% if tracked_players %}
-                    <form action="{{ url_for('untrack_all_players') }}" method="post">
-                        {{ form.hidden_tag() }}
-                        <button type="submit" class="bg-red-800 hover:bg-red-700 text-white font-semibold py-1 px-3 text-xs rounded-md transition duration-150 ease-in-out">Untrack All</button>
-                    </form>
-                    {% endif %}
-                </div>
-                <div class="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4 min-h-[200px]">
-                     {% if tracked_players %}
-                        <ul class="space-y-3">
-                            {% for item in tracked_players %}
-                            <li class="bg-slate-200 dark:bg-slate-700/60 rounded-md">
-                                {% if item.event and item.event.state in ['inProgress', 'completed'] %}
-                                    <div x-data="{ open: false }">
-                                        <button @click="open = !open" class="w-full flex justify-between items-center p-3 text-left">
-                                            <div class="flex items-center">
-                                                <img src="{{ item.player.image or 'https://placehold.co/40x40/334155/e2e8f0?text=?' }}" alt="{{ item.player.name }} Logo" class="h-8 w-8 rounded-full object-cover mr-3">
-                                                <span class="font-bold text-slate-700 dark:text-slate-200">{{ item.player.name }}</span>
-                                            </div>
-                                            <svg class="w-5 h-5 text-slate-500 transform transition-transform" :class="{'rotate-180': open}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                                        </button>
-                                        <div x-show="open" x-transition class="p-3 border-t border-slate-300 dark:border-slate-600">
-                                            <p class="text-sm text-slate-600 dark:text-slate-300"><strong>Event:</strong> {{ item.event.team_one }} vs {{ item.event.team_two }}</p>
-                                            <p class="text-sm text-slate-500 dark:text-slate-400"><strong>Status:</strong> <span class="font-semibold">{{ item.event.state }}</span></p>
-                                            <div class="mt-4 space-y-4">
-                                                {% for game in item.event.match.games %}
-                                                <div class="border-t border-slate-300 dark:border-slate-600 pt-2">
-                                                    <h4 class="text-sm font-bold text-slate-600 dark:text-slate-400 mb-2">Game {{ loop.index }} Stats:</h4>
-                                                    <div class="grid grid-cols-2 gap-x-4">
-                                                        {% if game.gameTeams and game.gameTeams|length >= 2 %}
-                                                        <div>
-                                                            <h5 class="text-xs font-semibold text-center mb-1">{{ game.gameTeams[0].team_name }}</h5>
-                                                            <table class="w-full text-xs text-center text-slate-500 dark:text-slate-400"><tbody>
-                                                                {% for player_stat in game.gameTeams[0].gamePlayers %}
-                                                                {% set is_tracked_player = player_stat.match_player and player_stat.match_player.canonical_player_id == item.player.id %}
-                                                                    <tr class="{% if is_tracked_player %}bg-blue-900/60 font-bold text-white{% else %}border-b border-transparent{% endif %}"><td class="text-left py-1 px-2 rounded-l-md">{{ player_stat.stats.get('name', 'N/A') }}</td><td class="text-right py-1 px-2 rounded-r-md">{{ player_stat.stats.get('kills', -1) }}/{{ player_stat.stats.get('deaths', -1) }}/{{ player_stat.stats.get('assists', -1) }}</td></tr>
-                                                                {% endfor %}
-                                                            </tbody></table>
-                                                        </div>
-                                                        <div class="border-l border-slate-300 dark:border-slate-600 pl-4">
-                                                            <h5 class="text-xs font-semibold text-center mb-1">{{ game.gameTeams[1].team_name }}</h5>
-                                                            <table class="w-full text-xs text-center text-slate-500 dark:text-slate-400"><tbody>
-                                                                {% for player_stat in game.gameTeams[1].gamePlayers %}
-                                                                {% set is_tracked_player = player_stat.match_player and player_stat.match_player.canonical_player_id == item.player.id %}
-                                                                    <tr class="{% if is_tracked_player %}bg-blue-900/60 font-bold text-white{% else %}border-b border-transparent{% endif %}"><td class="text-left py-1 px-2 rounded-l-md">{{ player_stat.stats.get('name', 'N/A') }}</td><td class="text-right py-1 px-2 rounded-r-md">{{ player_stat.stats.get('kills', -1) }}/{{ player_stat.stats.get('deaths', -1) }}/{{ player_stat.stats.get('assists', -1) }}</td></tr>
-                                                                {% endfor %}
-                                                            </tbody></table>
-                                                        </div>
-                                                        {% endif %}
-                                                    </div>
-                                                </div>
-                                                {% endfor %}
-                                            </div>
-                                            <div class="flex justify-end items-center mt-3">
-                                                <button type="button" @click="handleTrackRequest('{{ url_for('untrack_item', item_id=item.id) }}').then(success => { if(success) $el.closest('li').remove(); })" class="bg-slate-600 hover:bg-red-600 text-white font-semibold py-1 px-3 text-xs rounded-md transition">Untrack</button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                {% else %}
-                                     <div x-data class="p-3">
-                                        <div class="flex justify-between items-center">
-                                            <div class="flex items-center">
-                                                <img src="{{ item.player.image or 'https://placehold.co/40x40/334155/e2e8f0?text=?' }}" alt="{{ item.player.name }} Logo" class="h-8 w-8 rounded-full object-cover mr-3">
-                                                <span class="font-bold text-slate-700 dark:text-slate-200">{{ item.player.name }}</span>
-                                            </div>
-                                            <button type="button" @click="handleTrackRequest('{{ url_for('untrack_item', item_id=item.id) }}').then(success => { if(success) $el.closest('li').remove(); })" class="bg-slate-600 hover:bg-red-600 text-white font-semibold py-1 px-3 text-xs rounded-md transition">Untrack</button>
-                                        </div>
-                                        {% if item.event %}
-                                            <div class="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                                                <p><strong>Event:</strong> {{ item.event.team_one }} vs {{ item.event.team_two }}</p>
-                                                <p><strong>Status:</strong> <span class="font-semibold">{{ item.event.state }}</span></p>
-                                                <a href="{{ url_for('show_event', id=item.event.id) }}" class="inline-block mt-2 text-blue-500 hover:text-blue-400 font-semibold">View Match Details &rarr;</a>
-                                            </div>
-                                        {% endif %}
-                                    </div>
-                                {% endif %}
-                                </li>
-                            {% endfor %}
-                        </ul>
-                    {% else %}
-                        <p class="text-slate-500 dark:text-slate-400">You are not tracking any players yet.</p>
-                    {% endif %}
-                </div>
+            <div class="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4 min-h-[200px]">
+                {% if tracked_players %}
+                    <ul class="space-y-3">
+                        {% for item in tracked_players %}
+                        <li class="bg-slate-200 dark:bg-slate-700/60 rounded-md p-3" data-item-id="{{ item.id }}" data-sport-name="{{ item.event.league.sport.name }}">
+                            {% include 'partials/_dashboard_item.html' %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="text-slate-500 dark:text-slate-400">You are not tracking any players yet.</p>
+                {% endif %}
             </div>
         </div>
     </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        console.log("Connecting to user dashboard SSE stream...");
+        const eventSource = new EventSource("{{ url_for('dashboard_stream') }}");
+
+        function highlightElement(element) {
+            if (!element) return;
+            element.classList.remove('highlight-update');
+            void element.offsetWidth;
+            element.classList.add('highlight-update');
+        }
+
+        function updateCell(id, newValue) {
+            const cell = document.getElementById(id);
+            if (cell && cell.textContent.trim() !== newValue.toString()) {
+                cell.textContent = newValue;
+                highlightElement(cell.closest('tr') || cell);
+            }
+        }
+
+        eventSource.onmessage = function(event) {
+            const matchData = JSON.parse(event.data);
+            const matchId = matchData.match_id || matchData.id;
+
+            const listItem = document.querySelector(`li[data-match-id="${matchId}"]`);
+            if (!listItem) return;
+
+            const trackedPlayerId = listItem.dataset.trackedPlayerId;
+            const trackedTeamId = listItem.dataset.trackedTeamId;
+            const sportName = listItem.dataset.sportName;
+            const itemId = listItem.dataset.itemId;
+
+            if (sportName === 'League of Legends') {
+                matchData.games.forEach(game => {
+                    if (trackedTeamId) {
+                        if (game.blue_team && game.blue_team.id == trackedTeamId) {
+                            highlightElement(document.getElementById(`lol-game-${game.game_id}-team-${game.blue_team.id}-box`));
+                        }
+                        if (game.red_team && game.red_team.id == trackedTeamId) {
+                            highlightElement(document.getElementById(`lol-game-${game.game_id}-team-${game.red_team.id}-box`));
+                        }
+                        for (const p_id in game.participants) {
+                            const p_stat = game.participants[p_id];
+                            updateCell(`lol-game-${game.game_id}-player-${p_stat.p_id}-kda`, `${p_stat.kills}/${p_stat.deaths}/${p_stat.assists}`);
+                        }
+                    } else if (trackedPlayerId) {
+                        for (const p_id in game.participants) {
+                            const p_stat = game.participants[p_id];
+                            if (p_stat.id == trackedPlayerId) {
+                                updateCell(`item-${itemId}-game-${game.game_id}-kda`, `${p_stat.kills}/${p_stat.deaths}/${p_stat.assists}`);
+                                updateCell(`item-${itemId}-game-${game.game_id}-cs`, p_stat.creeps);
+                            }
+                        }
+                    }
+                });
+            } else if (sportName === 'Baseball') {
+                if (trackedTeamId) {
+                    if (matchData.away_team && matchData.away_team.id == trackedTeamId) {
+                        highlightElement(document.getElementById(`mlb-match-${matchId}-team-${matchData.away_team.id}-box`));
+                    }
+                    if (matchData.home_team && matchData.home_team.id == trackedTeamId) {
+                        highlightElement(document.getElementById(`mlb-match-${matchId}-team-${matchData.home_team.id}-box`));
+                    }
+                    for (const playerId in matchData.away_team.players) {
+                        updateCell(`mlb-match-${matchId}-player-${playerId}-summary`, matchData.away_team.players[playerId].summary);
+                    }
+                    for (const playerId in matchData.home_team.players) {
+                        updateCell(`mlb-match-${matchId}-player-${playerId}-summary`, matchData.home_team.players[playerId].summary);
+                    }
+                } else if (trackedPlayerId) {
+                    const allPlayers = { ...matchData.away_team.players, ...matchData.home_team.players };
+                    if (allPlayers[trackedPlayerId]) {
+                        updateCell(`item-${itemId}-summary`, allPlayers[trackedPlayerId].summary);
+                    }
+                }
+            }
+        };
+
+        eventSource.onerror = function(err) {
+            console.error("Dashboard EventSource failed:", err);
+            eventSource.close();
+        };
+    });
+</script>
 {% endblock %}

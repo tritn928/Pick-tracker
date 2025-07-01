@@ -141,3 +141,26 @@ class Match:
         for player in self.away_team.players:
             ret += str(self.away_team.players[player]) + '\n'
         return ret
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "state": self.state,
+
+            "home_team": {
+                "id": self.home_team.id,
+                "name": self.home_team.name,
+                "players": {
+                    player_id: boxscore.__dict__
+                    for player_id, boxscore in self.home_team.players.items()
+                }
+            },
+            "away_team": {
+                "id": self.away_team.id,
+                "name": self.away_team.name,
+                "players": {
+                    player_id: boxscore.__dict__
+                    for player_id, boxscore in self.away_team.players.items()
+                }
+            }
+        }

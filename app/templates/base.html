@@ -7,6 +7,16 @@
     <meta name="csrf-token" content="{{ generate_csrf() }}">
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+    .highlight-update {
+        animation: highlight-fade 1.5s ease-out;
+    }
+
+    @keyframes highlight-fade {
+        0% { background-color: rgba(255, 255, 0, 0.5); } /* Start with a semi-transparent yellow */
+        100% { background-color: transparent; } /* Fade to transparent */
+    }
+</style>
 </head>
 <body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200">
 

@@ -10,25 +10,8 @@ def main():
     leaguesList = lolapi.get_leagues()
     event_schedule = lolapi.get_schedule(league_name='MSI', league_id='98767991325878492')
     print(event_schedule)
-    matches = set()
-
-    matches.add(lolapi.get_match('113470922764572294'))
-    while True:
-        for match in matches:
-            game = match.get_active_game()
-            if game:
-                print(f"Game {game.number} - {game.state}")
-                if game.participants:
-                    for p in game.participants:
-                        participant = game.participants[p]
-                        print(f"{participant.name} : {participant.kills}/{participant.deaths}/{participant.assists}")
-            if game is None:
-                print("no active games")
-                return
-            lolapi.update_match(match)
-            match.update_state()
-
-        time.sleep(15)
+    match = lolapi.get_match('113470922764572294')
+    print(match.to_dict())
 
 
 if __name__ == '__main__':

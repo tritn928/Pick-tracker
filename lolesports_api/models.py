@@ -173,3 +173,23 @@ class Match:
             if game.state == 'inProgress' or game.state == 'unstarted' or game.state == 'paused' or game.state == 'in_game':
                 return game
         return None
+
+    def to_dict(self):
+        return {
+            "match_id": self.match_id,
+            "state": self.state,
+            "team_ids": self.team_ids,
+            "games": [
+                {
+                    "game_id": game.game_id,
+                    "state": game.state,
+                    "number": game.number,
+                    "blue_team": game.blue_team.__dict__ if game.blue_team else None,
+                    "red_team": game.red_team.__dict__ if game.red_team else None,
+                    "participants": {
+                        p_id: player_stats.__dict__
+                        for p_id, player_stats in game.participants.items()
+                    }
+                } for game in self.games
+            ]
+        }

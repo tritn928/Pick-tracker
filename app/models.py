@@ -86,10 +86,16 @@ class User(UserMixin, db.Model):
     def __repr__(self):
         return f'<User {self.username}>'
 
+class Sport(db.Model):
+    __tablename__ = 'sports'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)
+    leagues = db.relationship('League', back_populates='sport')
 
 class League(db.Model):
     __tablename__ = 'leagues'
     id = db.Column(db.Integer, primary_key=True)
+    sport_id = db.Column(db.Integer, db.ForeignKey('sports.id'), nullable=False)
     name = db.Column(db.String(50), nullable=False)
     league_id = db.Column(db.String(50), nullable=False)
     image = db.Column(db.String(200))
@@ -98,6 +104,7 @@ class League(db.Model):
     canonical_teams = relationship('CanonicalTeam', back_populates='league')
     canonical_players = relationship('CanonicalPlayer', back_populates='league')
     events = relationship('Event', back_populates='league', cascade="all, delete-orphan")
+    sport = db.relationship('Sport', back_populates='leagues')
 
 class Event(db.Model):
     __tablename__ = 'events'

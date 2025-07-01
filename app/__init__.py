@@ -9,6 +9,7 @@ from flask_login import LoginManager
 from flask_wtf.csrf import CSRFProtect, generate_csrf
 from flask_caching import Cache
 from .celery_app import celery
+import redis
 
 # 1. Create extension instances globally, including Celery
 db = SQLAlchemy()
@@ -18,6 +19,7 @@ csrf = CSRFProtect()
 cache = Cache()
 # Configure login manager
 login_manager.login_view = 'login'
+redis_client = None
 
 def create_app(config_class=Config):
     """The Application Factory."""
@@ -37,6 +39,8 @@ def create_app(config_class=Config):
                 return self.run(*args, **kwargs)
 
     celery.Task = ContextTask
+    global redis_client
+    redis_client = redis.from_url(app.config['CACHE_REDIS_URL'])
 
     with app.app_context():
         from . import routes, models

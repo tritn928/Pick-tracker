@@ -5,7 +5,8 @@ from app import db
 import click
 import logging
 from app.models import *
-from app.tasks import seed_leagues_task, seed_events_for_league_task, seed_match_for_event_task
+from app.tasks import seed_leagues_task, seed_events_for_league_task, seed_match_for_event_task, \
+    kick_off_league_update_workflow, seed_sports_task, cleanup_unused_match_players, check_and_start_polling
 
 app, celery = create_app()
 
@@ -17,6 +18,9 @@ def seed_db_command():
     click.echo("Dropping and creating all tables...")
     db.drop_all()
     db.create_all()
+
+    click.echo("Stage 0: Creating Sports")
+    seed_sports_task.delay().get(timeout=300)
 
     click.echo("Stage 1: Seeding leagues...")
     seed_leagues_task.delay().get(timeout=300)
@@ -47,3 +51,15 @@ def delete_alembic_version():
         print("Alembic version information deleted successfully.")
     except Exception as e:
         print(f"An error occurred: {e}")
+
+@app.cli.command("update-leagues-db")
+def update_leagues_db_command():
+    kick_off_league_update_workflow.delay()
+
+@app.cli.command("cleanup-players-db")
+def cleanup_players_db_command():
+    cleanup_unused_match_players.delay()
+
+@app.cli.command("start-polling-db")
+def start_polling_db_command():
+    check_and_start_polling.delay()

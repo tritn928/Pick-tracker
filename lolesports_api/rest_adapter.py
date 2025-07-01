@@ -86,7 +86,6 @@ class RestAdapter:
 
         game = match_details.get_active_game()
         if game is not None:
-            print("updating game: " + str(game.number))
             full_url = game_url + game.game_id
             response = requests.get(url=full_url, headers=headers, params=params)
             if response.status_code == 204:
