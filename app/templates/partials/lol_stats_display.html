@@ -17,8 +17,7 @@
                 {% if found.player_stat %}
                 <div class="font-mono text-xs p-2 bg-slate-900/50 rounded">
                     Game {{ loop.index }}:
-                    K/D/A: <span id="item-{{ item.id }}-game-{{ game.game_id }}-kda" class="font-semibold">{{ found.player_stat.kills }}/{{ found.player_stat.deaths }}/{{ found.player_stat.assists }}</span> |
-                    CS: <span id="item-{{ item.id }}-game-{{ game.game_id }}-cs" class="font-semibold">{{ found.player_stat.creeps }}</span>
+                    K/D/A: <span id="item-{{ item.id }}-game-{{ game.game_id }}-kda" class="font-semibold">{{ found.player_stat.kills }}/{{ found.player_stat.deaths }}/{{ found.player_stat.assists }}</span>
                 </div>
                 {% endif %}
             {% endfor %}
