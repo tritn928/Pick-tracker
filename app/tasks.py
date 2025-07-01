@@ -250,14 +250,14 @@ def seed_leagues_task():
     db.session.flush()
     lol_sport = Sport.query.filter_by(name='League of Legends').first()
     mlb_sport = Sport.query.filter_by(name='Baseball').first()
-    # ignore = ['LCL', "TFT Esports ", 'LCS', "King's Duel", 'Worlds Qualifying Series', 'LCO', 'LLA', 'CBLOL',
-    #           'Arabian League']
+    ignore = ['LCL', "TFT Esports ", 'LCS', "King's Duel", 'Worlds Qualifying Series', 'LCO', 'LLA', 'CBLOL',
+              'Arabian League']
     # temp change to only include MSI for testing
-    include = ['MSI']
+    #include = ['MSI']
     leagues_list = lolapi.get_leagues()
     lol_to_add = [
         League(name=league['name'], sport_id=lol_sport.id, league_id=league['id'], image=league['image'], sport=lol_sport)
-        for league in leagues_list if league['name'] in include
+        for league in leagues_list if league['name'] not in ignore
     ]
     # Not worrying about separate MLB Leagues for now.
     mlb_to_add = League(name='MLB', sport_id=mlb_sport.id, league_id='1', image='https://www.mlbstatic.com/team-logos/league-on-dark/1.svg', sport=mlb_sport)
@@ -525,10 +525,12 @@ def seed_mlb_matches(event):
         away_team_api = mlbapi.get_team(match_details.away_team.id, today.strftime("%Y-%m-%d"))
         home_canonical_team = get_or_create_canonical_team(home_team_api, event.league, 'MLB',
                                                            id=str(match_details.home_team.id),
-                                                           name=match_details.home_team.name)
+                                                           name=match_details.home_team.name,
+                                                           image=f"https://www.mlbstatic.com/team-logos/team-cap-on-dark/{match_details.home_team.id}.svg")
         away_canonical_team = get_or_create_canonical_team(away_team_api, event.league, 'MLB',
                                                            id=str(match_details.away_team.id),
-                                                           name=match_details.away_team.name)
+                                                           name=match_details.away_team.name,
+                                                           image=f"https://www.mlbstatic.com/team-logos/team-cap-on-dark/{match_details.away_team.id}.svg")
         home_mt = MatchTeam(name=home_canonical_team.name, image=home_canonical_team.image, match=new_match,
                             canonical_team=home_canonical_team)
         away_mt = MatchTeam(name=away_canonical_team.name, image=away_canonical_team.image, match=new_match,
@@ -543,7 +545,7 @@ def seed_mlb_matches(event):
                                                               external_id=str(api_player_data['person']['id']),
                                                               name=api_player_data['person']['fullName'],
                                                               role=api_player_data['position']['name'],
-                                                              image=None)
+                                                              image=f"https://img.mlbstatic.com/mlb-photos/image/upload/w_213,d_people:generic:headshot:silo:current.png,q_auto:best,f_auto/v1/people/{api_player_data['person']['id']}/headshot/67/current")
             if canonical_player:
                 match_player = MatchPlayer(name=canonical_player.name, role=canonical_player.role,
                                            image=canonical_player.image, match_team=home_mt,
@@ -556,7 +558,7 @@ def seed_mlb_matches(event):
                                                               external_id=str(api_player_data['person']['id']),
                                                               name=api_player_data['person']['fullName'],
                                                               role=api_player_data['position']['name'],
-                                                              image=None)
+                                                              image=f"https://img.mlbstatic.com/mlb-photos/image/upload/w_213,d_people:generic:headshot:silo:current.png,q_auto:best,f_auto/v1/people/{api_player_data['person']['id']}/headshot/67/current")
             if canonical_player:
                 match_player = MatchPlayer(name=canonical_player.name, role=canonical_player.role,
                                            image=canonical_player.image, match_team=away_mt,
@@ -603,7 +605,7 @@ def seed_mlb_matches(event):
                 external_id=str(player_data.id),
                 name=player_data.name,
                 role=player_data.position,
-                image=None
+                image=f"https://img.mlbstatic.com/mlb-photos/image/upload/w_213,d_people:generic:headshot:silo:current.png,q_auto:best,f_auto/v1/people/{player_data.id}/headshot/67/current"
             )
             match_player_for_stats = mlb_current_match_players_map.get(
                 canonical_player_for_stats.external_id)
@@ -667,7 +669,7 @@ def seed_mlb_matches(event):
                 external_id=str(player_data.id),
                 name=player_data.name,
                 role=player_data.position,
-                image=None
+                image=f"https://img.mlbstatic.com/mlb-photos/image/upload/w_213,d_people:generic:headshot:silo:current.png,q_auto:best,f_auto/v1/people/{player_data.id}/headshot/67/current"
             )
             match_player_for_stats = mlb_current_match_players_map.get(
                 canonical_player_for_stats.external_id)
@@ -977,6 +979,7 @@ def store_final_mlb_results_in_db(final_match_object, event:Event):
             home_game_team = GameTeam(
                 team_id=str(home_game_canonical_team.external_id),
                 team_name=home_game_canonical_team.name,
+                image=f"https://www.mlbstatic.com/team-logos/team-cap-on-dark/{final_match_object.home_team.id}.svg"
             )
             home_game_team.game = game_obj
             home_game_team.canonical_team = home_game_canonical_team
@@ -984,6 +987,7 @@ def store_final_mlb_results_in_db(final_match_object, event:Event):
             away_game_team = GameTeam(
                 team_id=str(away_game_canonical_team.external_id),
                 team_name=away_game_canonical_team.name,
+                image=f"https://www.mlbstatic.com/team-logos/team-cap-on-dark/{final_match_object.away_team.id}.svg"
             )
             away_game_team.game = game_obj
             away_game_team.canonical_team = away_game_canonical_team
@@ -1003,7 +1007,7 @@ def store_final_mlb_results_in_db(final_match_object, event:Event):
                 external_id=str(player_data.id),
                 name=player_data.name,
                 role=player_data.position,
-                image=None
+                image=f"https://img.mlbstatic.com/mlb-photos/image/upload/w_213,d_people:generic:headshot:silo:current.png,q_auto:best,f_auto/v1/people/{player_data.id}/headshot/67/current"
             )
             match_player_for_stats = mlb_current_match_players_map.get(
                 canonical_player_for_stats.external_id)
@@ -1070,7 +1074,7 @@ def store_final_mlb_results_in_db(final_match_object, event:Event):
                 external_id=str(player_data.id),
                 name=player_data.name,
                 role=player_data.position,
-                image=None
+                image=f"https://img.mlbstatic.com/mlb-photos/image/upload/w_213,d_people:generic:headshot:silo:current.png,q_auto:best,f_auto/v1/people/{player_data.id}/headshot/67/current"
             )
             match_player_for_stats = mlb_current_match_players_map.get(
                 canonical_player_for_stats.external_id)
@@ -1280,12 +1284,9 @@ def start_match_polling_chain(self, event_id):
         raise
 
 @celery.task(bind=True)
-def check_and_start_polling(self):
+def check_unstarted_events(self):
     try:
-        current_app.logger.info("Running task to check all unstarted and in progress events...")
-        now = datetime.now(timezone.utc)
-        current_app.logger.info("Updating TBD tasks first")
-        # --- Step 1: Update TBD Events (Same as before) ---
+        current_app.logger.info("Updating TBD tasks...")
         tbd_events = Event.query.filter(
             Event.state == 'unstarted',
             db.or_(Event.team_one == 'TBD', Event.team_two == 'TBD')
@@ -1300,46 +1301,45 @@ def check_and_start_polling(self):
                     current_app.logger.error(f"Error updating TBD for Event {event.id}: {e}")
                     db.session.rollback()
             db.session.commit()
+    except OperationalError as exc:
+        raise self.retry(exc=exc, countdown=60, max_retries=3)
+    except Exception as exc:
+        current_app.logger.error(f"An unexpected error occurred in check_unstarted_events: {exc}", exc_info=True)
+        raise
+
+@celery.task(bind=True)
+def check_and_start_polling(self):
+    try:
+        current_app.logger.info("Running task to check all unstarted and in progress events...")
+        now = datetime.now(timezone.utc)
 
         # --- Step 2: Schedule Start Jobs for New/Resolved Events ---
-        # Find events that have resolved teams but haven't had their start job scheduled yet.
-        events_to_schedule = Event.query.filter(
+        events_to_start = Event.query.filter(
             db.or_(Event.state == 'unstarted', Event.state == 'inProgress'),
-            Event.is_start_scheduled == False,
             Event.team_one != 'TBD',
-            Event.team_two != 'TBD'
+            Event.team_two != 'TBD',
         ).all()
-
-        if not events_to_schedule:
-            current_app.logger.info("No new events to schedule.")
-            return
-
-        current_app.logger.info(f"Found {len(events_to_schedule)} new/resolved events to schedule.")
-
-        for event in events_to_schedule:
-            if not event.start_time_datetime:
-                # Skip if there's no valid start time yet
+        for event in events_to_start:
+            if not event.match_id:
+                continue
+            if event.start_time_datetime.replace(tzinfo=timezone.utc) > now:
                 continue
 
-            # The 'if event.start_time_datetime > now:' check has been removed.
-            # Celery will now schedule the task to run immediately if the ETA is in the past.
-            current_app.logger.info(
-                f"Scheduling start task for Event {event.id} at {event.start_time_datetime.isoformat()}")
+            lock_key = f"polling_lock:{event.match_id}"
 
-            # Use apply_async with an ETA to schedule the task for the exact start time
-            start_match_polling_chain.apply_async(
-                args=[event.id],
-                eta=event.start_time_datetime
-            )
+            # Try to acquire a lock. nx=True means set only if it doesn't exist.
+            # ex=3600 sets a 1-hour timeout on the lock as a safety measure.
+            lock_acquired = redis_client.set(lock_key, "locked", ex=300, nx=True)
 
-            # Mark this event as scheduled to prevent re-scheduling
-            event.is_start_scheduled = True
-
-        # Commit the changes (setting is_start_scheduled to True)
-        db.session.commit()
+            if lock_acquired:
+                current_app.logger.info(f"SUPERVISOR: Acquired lock for match {event.match_id}. Kicking off polling task.")
+                event.state = 'inProgress'
+                poll_live_match_data.delay(event.id)
+            else:
+                current_app.logger.debug(f"SUPERVISOR: Match {event.match_id} is already being polled. Skipping.")
         current_app.logger.info("Finished scheduling start jobs.")
     except OperationalError as exc:
         raise self.retry(exc=exc, countdown=60, max_retries=3)
     except Exception as exc:
-        current_app.logger.error(f"An unexpected error occurred in process_unstarted_events: {exc}", exc_info=True)
+        current_app.logger.error(f"An unexpected error occurred in check_and_start_polling: {exc}", exc_info=True)
         raise

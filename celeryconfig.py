@@ -12,9 +12,13 @@ beat_schedule = {
         'task': 'app.tasks.kick_off_league_update_workflow',
         'schedule': crontab(minute='0', hour='*'),
     },
-    'check-events-every-hour': {
+    'check-events-every-5-minutes': {
         'task': 'app.tasks.check_and_start_polling',
-        'schedule': crontab(minute='5', hour='*'),
+        'schedule': crontab(minute='*/5'),
+    },
+    'check-unstarted-events-every-hour': {
+        'task': 'app.tasks.check_unstarted_events',
+        'schedule': crontab(hour='*', minute='5'),
     },
     'cleanup_unused_match_players_once_a_day': {
         'task': 'app.tasks.cleanup_unused_match_players',

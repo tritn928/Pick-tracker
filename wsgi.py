@@ -1,7 +1,7 @@
 from celery import group
 
 from app import create_app
-from app import db
+from app import db, redis_client
 import click
 import logging
 from app.models import *
@@ -63,3 +63,14 @@ def cleanup_players_db_command():
 @app.cli.command("start-polling-db")
 def start_polling_db_command():
     check_and_start_polling.delay()
+
+
+@app.cli.command("clear-redis")
+def clear_redis_command():
+    with app.app_context():
+        click.echo("Connecting to Redis and flushing all data...")
+        try:
+            redis_client.flushdb()
+            click.echo("Redis has been successfully flushed.")
+        except Exception as e:
+            click.echo(f"An error occurred while trying to flush Redis: {e}")

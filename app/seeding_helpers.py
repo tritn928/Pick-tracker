@@ -124,7 +124,8 @@ def get_or_create_canonical_team(team_data, related_league, sport, id=None, name
                 #external_id=None, name=None, image=None, role=None
                 get_or_create_canonical_player(player_data, related_league, 'MLB', team_to_associate_if_new=new_team,
                                                external_id=player_data['person']['id'], name=player_data['person']['fullName'],
-                                               image=None, role=player_data['position']['name'])
+                                               image=f"https://img.mlbstatic.com/mlb-photos/image/upload/w_213,d_people:generic:headshot:silo:current.png,q_auto:best,f_auto/v1/people/{player_data['person']['id']}/headshot/67/current",
+                                               role=player_data['position']['name'])
 
             return new_team
         except IntegrityError:
