@@ -1,6 +1,7 @@
 import requests
 import requests.packages
-from lolesports_api.models import Result, Schedule, Match
+
+from lolesports_api.models import Result, Schedule, Match, Event
 from typing import List, Dict
 from datetime import datetime, timedelta, timezone
 
@@ -37,9 +38,12 @@ class RestAdapter:
             print("Could not find match")
             return None
         match_details = Match(match_id, response.data)
-        return self.update_match(match_details)
+        self.populate_games(match_details)
+        return match_details
 
-    def update_match(self, match_details: Match) -> Match:
+    # Runs once after creating a Match.
+    # Fills in all Games that are completed or inProgress once
+    def populate_games(self, match_details: Match):
         headers = {'x-api-key': self._api_key}
         game_url = 'https://feed.lolesports.com/livestats/v1/window/'
 
@@ -52,15 +56,9 @@ class RestAdapter:
         currentTime = currentTime - timedelta(minutes=1)
         params = {'startingTime': currentTime.strftime("%Y-%m-%dT%H:%M:%SZ")}
 
-        do = True
-        # Update match with game details
-        for game_id in match_details.game_ids:
-            #TODO: find a way to tell if game_id is complete, then skip it if it is
-            for completed_game_id in match_details.completed_game_ids:
-                if game_id == completed_game_id:
-                    do = False
-            if do:
-                full_url = game_url + game_id
+        for game in match_details.games:
+            if game.state == 'completed' or game.state == 'inProgress':
+                full_url = game_url + game.game_id
                 response = requests.get(url=full_url, headers=headers, params=params)
                 if response.status_code == 204:
                     print("***************************GAME NOT FOUND**************************************")
@@ -69,8 +67,35 @@ class RestAdapter:
                     print("***************************NO LIVE STATS****************************************")
                     break
                 data_out = response.json()
-                match_details.add_game(game_id, data_out)
-        return match_details
+                game.populate(data_out)
+
+
+
+    def update_match(self, match_details: Match):
+        headers = {'x-api-key': self._api_key}
+        game_url = 'https://feed.lolesports.com/livestats/v1/window/'
+
+        # Get current time and convert conform to fit api standard
+        currentTime = datetime.now(timezone.utc)
+        seconds = (currentTime.replace(tzinfo=None) - currentTime.min).seconds
+        roundTo = 10
+        rounding = (seconds + roundTo / 2) // roundTo * roundTo
+        currentTime = currentTime + timedelta(0, rounding - seconds, -currentTime.microsecond)
+        currentTime = currentTime - timedelta(minutes=1)
+        params = {'startingTime': currentTime.strftime("%Y-%m-%dT%H:%M:%SZ")}
+
+        game = match_details.get_active_game()
+        if game is not None:
+            full_url = game_url + game.game_id
+            response = requests.get(url=full_url, headers=headers, params=params)
+            if response.status_code == 204:
+                print("*************************GAME NOT FOUND******************************")
+                return
+            if response.status_code == 404:
+                print("***************************NO LIVE STATS****************************************")
+                return
+            game.update_from_frame(response.json())
+        match_details.update_state()
 
     def get_live(self) -> Schedule:
         params = {'hl': 'en-US'}
@@ -92,3 +117,13 @@ class RestAdapter:
         if response.status_code != 200:
             print("could not get teams")
         return response.data.get('data').get('teams')
+
+    def update_match_state(self, match:Match):
+        params = {'hl': 'en-US', 'id': match.match_id}
+        response = self.get('persisted/gw/getEventDetails', ep_params=params)
+        if response.status_code != 200 or response.data.get('data').get('event') is None:
+            print("Could not find match")
+            return
+        data = response.data.get('data').get('event').get('match')
+        if data['games'][-1]['state'] == 'completed' or data['games'][-1]['state'] == 'unneeded' or data['games'][-1]['state'] == 'finished':
+            match.state = 'completed'

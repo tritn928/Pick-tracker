@@ -4,17 +4,18 @@
 <body class="min-h-screen p-4 bg-slate-800 text-slate-200">
     <div class="max-w-7xl mx-auto py-8">
         <a href="{{ url_for('leagues') }}" class="text-blue-400 hover:underline mb-4 block">&larr; Back to Leagues</a>
-        <h1 class="text-3xl font-extrabold text-white mb-6 text-center">{{ title }}</h1>
+        <h1 class="text-3xl font-extrabold text-white mb-6 text-center">{{ event.team_one }} vs {{ event.team_two }}</h1>
 
         {% if teams and teams|length == 2 %}
         <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+            <!-- Team 1 Column -->
             <div class="bg-slate-700/50 rounded-lg p-4 flex flex-col items-center md:col-span-3">
-                <img src="{{ teams[0].image }}" alt="{{ teams[0].name }} Logo" class="h-24 w-24 object-contain mb-2">
-                <h2 class="text-2xl font-bold text-white mb-2">{{ teams[0].name }}</h2>
+                <img src="{{ teams[0].canonical_team.image }}" alt="{{ teams[0].canonical_team.name }} Logo" class="h-24 w-24 object-contain mb-2">
+                <h2 class="text-2xl font-bold text-white mb-2">{{ teams[0].canonical_team.name }}</h2>
 
                 {% if teams[0].canonical_team %}
-                    <div x-data="{ isTracked: {{ current_user.is_tracking_team(teams[0].canonical_team)|tojson }} }" class="w-full">
-                        <button type="button" @click="handleTrackRequest(isTracked ? '{{ url_for('untrack_team', team_id=teams[0].canonical_team.id) }}' : '{{ url_for('track_team', team_id=teams[0].canonical_team.id) }}').then(success => { if (success) isTracked = !isTracked; })"
+                    <div x-data="{ isTracked: {{ current_user.is_tracking(event, team=teams[0].canonical_team)|tojson }} }" class="w-full">
+                        <button type="button" @click="handleTrackRequest(isTracked ? '{{ url_for('untrack_team', team_id=teams[0].canonical_team.id, event_id=event.id) }}' : '{{ url_for('track_team', team_id=teams[0].canonical_team.id, event_id=event.id) }}').then(success => { if (success) isTracked = !isTracked; })"
                                 :class="isTracked ? 'bg-slate-600 hover:bg-slate-500' : 'bg-blue-600 hover:bg-blue-700'"
                                 class="w-full text-white font-semibold py-1 px-3 rounded-lg text-sm transition">
                             <span x-text="isTracked ? 'Untrack Team' : 'Track Team'"></span>
@@ -26,12 +27,11 @@
                     {% for player in teams[0].match_players %}
                         <li class="flex justify-between items-center bg-slate-800/60 p-2 rounded-md">
                             <div>
-                                <span class="font-semibold">{{ player.name }}</span>
-                                {% if player.role %}<span class="text-sm text-slate-400 ml-2">({{ player.role }})</span>{% endif %}
+                                <span class="font-semibold">{{ player.canonical_player.name }}</span>
                             </div>
                             {% if player.canonical_player %}
-                               <div x-data="{ isTracked: {{ current_user.is_tracking_player(player.canonical_player)|tojson }} }">
-                                    <button type="button" @click="handleTrackRequest(isTracked ? '{{ url_for('untrack_player', player_id=player.canonical_player.id) }}' : '{{ url_for('track_player', player_id=player.canonical_player.id) }}').then(success => { if (success) isTracked = !isTracked; })"
+                               <div x-data="{ isTracked: {{ current_user.is_tracking(event, player=player.canonical_player)|tojson }} }">
+                                    <button type="button" @click="handleTrackRequest(isTracked ? '{{ url_for('untrack_player', player_id=player.canonical_player.id, event_id=event.id) }}' : '{{ url_for('track_player', player_id=player.canonical_player.id, event_id=event.id) }}').then(success => { if (success) isTracked = !isTracked; })"
                                             :class="isTracked ? 'bg-slate-600 hover:bg-slate-500' : 'bg-blue-600 hover:bg-blue-700'"
                                             class="text-white font-semibold py-1 px-2 text-xs rounded-md transition">
                                         <span x-text="isTracked ? 'Untrack' : 'Track'"></span>
@@ -43,63 +43,124 @@
                 </ul>
             </div>
 
+            <!-- Middle Column for Games -->
             <div class="rounded-lg p-4 md:col-span-6">
                 <h2 class="text-xl font-bold text-center text-white mb-4">Game Details</h2>
-                {% if games %}
-                    <div class="space-y-4">
-                        {% for game in games %}
-                            <div x-data="{ open: false }">
-                                <button @click="open = !open" type="button" class="w-full bg-slate-700 text-white rounded-md py-2 px-4 text-left cursor-pointer focus:outline-none focus:ring focus:ring-blue-500 flex justify-between items-center">
-                                    <span>Game {{ loop.index }}</span>
-                                    <svg class="w-4 h-4 transform transition-transform" :class="{'rotate-180': open}" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                                </button>
-                                <div x-show="open" x-transition class="bg-slate-800 shadow-lg rounded-b-md overflow-hidden mt-1">
-                                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4">
-                                        {% if game.gameTeams and game.gameTeams|length >= 2 %}
-                                        <div>
-                                            <h3 class="font-semibold text-slate-300 mb-2 text-center">{{ game.gameTeams[0].team_name }}</h3>
-                                            <table class="w-full text-sm text-left text-slate-400">
-                                                <thead class="text-xs text-slate-500 uppercase border-b border-slate-700">
-                                                    <tr><th class="py-2 px-1 text-center">Player</th><th class="py-2 px-1 text-center">Role</th><th class="py-2 px-1 text-center">K/D/A</th></tr>
-                                                </thead>
-                                                <tbody>
-                                                    {% for player in game.gameTeams[0].gamePlayers %}
-                                                        <tr class="border-b border-slate-700"><td class="py-2 px-1 text-center">{{ player.name }}</td><td class="py-2 px-1 text-center">{{ player.role }}</td><td class="py-2 px-1 text-center">{{ player.kills }}/{{ player.deaths }}/{{ player.assists }}</td></tr>
-                                                    {% endfor %}
-                                                </tbody>
-                                            </table>
+
+                {# Check if match_data (from cache or DB) exists #}
+                {% if match_data %}
+                    {# --- LEAGUE OF LEGENDS DISPLAY --- #}
+                    {% if sport.name == 'League of Legends' %}
+                        <div class="space-y-4">
+                            {% for game in match_data.games %}
+                                <div x-data="{ open: true }">
+                                    <button @click="open = !open" type="button" class="w-full bg-slate-700 text-white rounded-md py-2 px-4 text-left cursor-pointer focus:outline-none focus:ring focus:ring-blue-500 flex justify-between items-center">
+                                        <span>Game {{ loop.index }}</span>
+                                        <svg class="w-4 h-4 transform transition-transform" :class="{'rotate-180': open}" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                    </button>
+                                    <div x-show="open" x-transition class="bg-slate-800 shadow-lg rounded-b-md overflow-hidden mt-1">
+                                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4">
+                                            <!-- Blue Team -->
+                                            <div>
+                                                <h3 class="font-semibold text-slate-300 mb-2 text-center">{{ game.blue_team.name }}</h3>
+                                                <table class="w-full text-sm text-left text-slate-400">
+                                                    <thead class="text-xs text-slate-500 uppercase border-b border-slate-700">
+                                                        <tr><th class="py-2 px-1 text-left">Player</th><th class="py-2 px-1 text-right">K/D/A</th></tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {% for p_id, p_stat in game.participants.items() %}
+                                                            {% if p_id and p_id|int <= 5 %}
+                                                            <tr class="border-b border-slate-700 border-opacity-50">
+                                                                <td id="lol-game-{{game.game_id}}-player-{{p_id}}-name" class="py-1 px-2 text-left">{{ p_stat.name }}</td>
+                                                                <td id="lol-game-{{game.game_id}}-player-{{p_id}}-kda" class="py-1 px-2 text-right">{{ p_stat.kills }}/{{ p_stat.deaths }}/{{ p_stat.assists }}</td>
+                                                            </tr>
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <!-- Red Team -->
+                                            <div>
+                                                <h3 class="font-semibold text-slate-300 mb-2 text-center">{{ game.red_team.name }}</h3>
+                                                <table class="w-full text-sm text-left text-slate-400">
+                                                    <thead class="text-xs text-slate-500 uppercase border-b border-slate-700">
+                                                        <tr><th class="py-2 px-1 text-left">Player</th><th class="py-2 px-1 text-right">K/D/A</th></tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {% for p_id, p_stat in game.participants.items() %}
+                                                            {% if p_id and p_id|int > 5 %}
+                                                            <tr class="border-b border-slate-700 border-opacity-50">
+                                                                <td id="lol-game-{{game.game_id}}-player-{{p_id}}-name" class="py-1 px-2 text-left">{{ p_stat.name }}</td>
+                                                                <td id="lol-game-{{game.game_id}}-player-{{p_id}}-kda" class="py-1 px-2 text-right">{{ p_stat.kills }}/{{ p_stat.deaths }}/{{ p_stat.assists }}</td>
+                                                            </tr>
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                    </tbody>
+                                                </table>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <h3 class="font-semibold text-slate-300 mb-2 text-center">{{ game.gameTeams[1].team_name }}</h3>
-                                            <table class="w-full text-sm text-right text-slate-400">
-                                                <thead class="text-xs text-slate-500 uppercase border-b border-slate-700">
-                                                    <tr><th class="py-2 px-1 text-center">Player</th><th class="py-2 px-1 text-center">Role</th><th class="py-2 px-1 text-center">K/D/A</th></tr>
-                                                </thead>
-                                                <tbody>
-                                                    {% for player in game.gameTeams[1].gamePlayers %}
-                                                        <tr class="border-b border-slate-700"><td class="py-2 px-1 text-center">{{ player.name }}</td><td class="py-2 px-1 text-center">{{ player.role }}</td><td class="py-2 px-1 text-center">{{ player.kills }}/{{ player.deaths }}/{{ player.assists }}</td></tr>
-                                                    {% endfor %}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                        {% endif %}
                                     </div>
                                 </div>
+                            {% endfor %}
+                        </div>
+
+                    {# --- MLB DISPLAY --- #}
+                    {% elif sport.name == 'Baseball' %}
+                        <div class="bg-slate-800 shadow-lg rounded-md overflow-hidden mt-1 p-4">
+                            <h3 class="font-semibold text-slate-300 mb-2 text-center">Box Score</h3>
+                            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4">
+                                <!-- Home Team -->
+                                <div>
+                                    <h4 class="font-semibold text-slate-300 mb-2 text-center">{{ match_data.home_team.name }}</h4>
+                                    <table class="w-full text-sm text-left text-slate-400">
+                                        <thead class="text-xs text-slate-500 uppercase border-b border-slate-700">
+                                            <tr><th class="py-2 px-1 text-left">Player</th><th class="py-2 px-1 text-center">Pos</th><th class="py-2 px-1 text-right">Stats</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for player_id, player_stats in match_data.home_team.players.items() %}
+                                                <tr class="border-b border-slate-700 border-opacity-50">
+                                                    <td id="mlb-player-{{ player_id }}-name" class="py-1 px-2 text-left">{{ player_stats.name }}</td>
+                                                    <td id="mlb-player-{{ player_id }}-position" class="py-1 px-2 text-center">{{ player_stats.position }}</td>
+                                                    <td id="mlb-player-{{ player_id }}-summary" class="py-1 px-2 text-right">{{ player_stats.summary }}</td>
+                                                </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <!-- Away Team -->
+                                <div>
+                                    <h4 class="font-semibold text-slate-300 mb-2 text-center">{{ match_data.away_team.name }}</h4>
+                                    <table class="w-full text-sm text-left text-slate-400">
+                                        <thead class="text-xs text-slate-500 uppercase border-b border-slate-700">
+                                            <tr><th class="py-2 px-1 text-left">Player</th><th class="py-2 px-1 text-center">Pos</th><th class="py-2 px-1 text-right">Stats</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for player_id, player_stats in match_data.away_team.players.items() %}
+                                                <tr class="border-b border-slate-700 border-opacity-50">
+                                                    <td id="mlb-player-{{ player_id }}-name" class="py-1 px-2 text-left">{{ player_stats.name }}</td>
+                                                    <td id="mlb-player-{{ player_id }}-position" class="py-1 px-2 text-center">{{ player_stats.position }}</td>
+                                                    <td id="mlb-player-{{ player_id }}-summary" class="py-1 px-2 text-right">{{ player_stats.summary }}</td>
+                                                </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
-                        {% endfor %}
-                    </div>
+                        </div>
+                    {% endif %}
                 {% else %}
                     <p class="text-slate-400 text-center mt-8">No game details available for this match yet.</p>
                 {% endif %}
             </div>
 
+            <!-- Team 2 Column -->
             <div class="bg-slate-700/50 rounded-lg p-4 flex flex-col items-center md:col-span-3">
-                 <img src="{{ teams[1].image }}" alt="{{ teams[1].name }} Logo" class="h-24 w-24 object-contain mb-2">
-                <h2 class="text-2xl font-bold text-white mb-2">{{ teams[1].name }}</h2>
+                <img src="{{ teams[1].canonical_team.image }}" alt="{{ teams[1].canonical_team.name }} Logo" class="h-24 w-24 object-contain mb-2">
+                <h2 class="text-2xl font-bold text-white mb-2">{{ teams[1].canonical_team.name }}</h2>
 
-                {% if teams[1].canonical_team %}
-                   <div x-data="{ isTracked: {{ current_user.is_tracking_team(teams[1].canonical_team)|tojson }} }" class="w-full">
-                        <button type="button" @click="handleTrackRequest(isTracked ? '{{ url_for('untrack_team', team_id=teams[1].canonical_team.id) }}' : '{{ url_for('track_team', team_id=teams[1].canonical_team.id) }}').then(success => { if (success) isTracked = !isTracked; })"
+                {% if teams[0].canonical_team %}
+                    <div x-data="{ isTracked: {{ current_user.is_tracking(event, team=teams[1].canonical_team)|tojson }} }" class="w-full">
+                        <button type="button" @click="handleTrackRequest(isTracked ? '{{ url_for('untrack_team', team_id=teams[1].canonical_team.id, event_id=event.id) }}' : '{{ url_for('track_team', team_id=teams[1].canonical_team.id, event_id=event.id) }}').then(success => { if (success) isTracked = !isTracked; })"
                                 :class="isTracked ? 'bg-slate-600 hover:bg-slate-500' : 'bg-blue-600 hover:bg-blue-700'"
                                 class="w-full text-white font-semibold py-1 px-3 rounded-lg text-sm transition">
                             <span x-text="isTracked ? 'Untrack Team' : 'Track Team'"></span>
@@ -109,14 +170,13 @@
 
                 <ul class="mt-4 w-full space-y-2">
                     {% for player in teams[1].match_players %}
-                         <li class="flex justify-between items-center bg-slate-800/60 p-2 rounded-md">
+                        <li class="flex justify-between items-center bg-slate-800/60 p-2 rounded-md">
                             <div>
-                                <span class="font-semibold">{{ player.name }}</span>
-                                {% if player.role %}<span class="text-sm text-slate-400 ml-2">({{ player.role }})</span>{% endif %}
+                                <span class="font-semibold">{{ player.canonical_player.name }}</span>
                             </div>
                             {% if player.canonical_player %}
-                                <div x-data="{ isTracked: {{ current_user.is_tracking_player(player.canonical_player)|tojson }} }">
-                                    <button type="button" @click="handleTrackRequest(isTracked ? '{{ url_for('untrack_player', player_id=player.canonical_player.id) }}' : '{{ url_for('track_player', player_id=player.canonical_player.id) }}').then(success => { if (success) isTracked = !isTracked; })"
+                               <div x-data="{ isTracked: {{ current_user.is_tracking(event, player=player.canonical_player)|tojson }} }">
+                                    <button type="button" @click="handleTrackRequest(isTracked ? '{{ url_for('untrack_player', player_id=player.canonical_player.id, event_id=event.id) }}' : '{{ url_for('track_player', player_id=player.canonical_player.id, event_id=event.id) }}').then(success => { if (success) isTracked = !isTracked; })"
                                             :class="isTracked ? 'bg-slate-600 hover:bg-slate-500' : 'bg-blue-600 hover:bg-blue-700'"
                                             class="text-white font-semibold py-1 px-2 text-xs rounded-md transition">
                                         <span x-text="isTracked ? 'Untrack' : 'Track'"></span>

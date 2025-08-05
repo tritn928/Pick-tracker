@@ -1,195 +1,165 @@
 {% extends "base.html" %}
 
 {% block content %}
-    <div class="bg-white dark:bg-slate-800 shadow-md rounded-lg p-6">
-        <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
-            <h1 class="text-2xl font-bold">Welcome, <span class="text-blue-500">{{ current_user.username }}</span>!</h1>
+<div class="bg-white dark:bg-slate-800 shadow-md rounded-lg p-6">
+    <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
+        <h1 class="text-2xl font-bold">Welcome, <span class="text-blue-500">{{ current_user.username }}</span>!</h1>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <!-- Column for Tracked Teams -->
+        <div>
+            <div class="flex justify-between items-center border-b-2 border-slate-200 dark:border-slate-700 pb-2 mb-4">
+                <h2 class="text-xl font-semibold text-slate-700 dark:text-slate-200">Tracked Teams</h2>
+                {% if tracked_teams %}
+                <form action="{{ url_for('untrack_all_teams') }}" method="post">
+                    {{ form.hidden_tag() }}
+                    <button type="submit" class="bg-red-800 hover:bg-red-700 text-white font-semibold py-1 px-3 text-xs rounded-md transition">Untrack All</button>
+                </form>
+                {% endif %}
+            </div>
+            <div class="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4 min-h-[200px]">
+                {% if tracked_teams %}
+                    <ul class="space-y-3">
+                        {% for item in tracked_teams %}
+                        <li class="bg-slate-200 dark:bg-slate-700/60 rounded-md p-3"
+                            data-item-id="{{ item.id }}"
+                            data-match-id="{{ item.event.match_id }}"
+                            data-sport-name="{{ item.event.league.sport.name }}"
+                            data-tracked-team-id="{{ item.team.external_id }}">
+                            {% include 'partials/_dashboard_item.html' %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="text-slate-500 dark:text-slate-400">You are not tracking any teams yet.</p>
+                {% endif %}
+            </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div>
-                <div class="flex justify-between items-center border-b-2 border-slate-200 dark:border-slate-700 pb-2 mb-4">
-                    <h2 class="text-xl font-semibold text-slate-700 dark:text-slate-200">Tracked Teams</h2>
-                    {% if tracked_teams %}
-                    <form action="{{ url_for('untrack_all_teams') }}" method="post">
-                        {{ form.hidden_tag() }}
-                        <button type="submit" class="bg-red-800 hover:bg-red-700 text-white font-semibold py-1 px-3 text-xs rounded-md transition duration-150 ease-in-out">
-                            Untrack All
-                        </button>
-                    </form>
-                    {% endif %}
-                </div>
-                <div class="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4 min-h-[200px]">
-                    {% if tracked_teams %}
-                        <ul class="space-y-3">
-                            {% for team, latest_event in tracked_teams %}
-                                {% if latest_event and latest_event.state in ['inProgress', 'completed'] %}
-                                    <li x-data="{ open: false }" class="bg-slate-200 dark:bg-slate-700/60 rounded-md">
-                                        <button @click="open = !open" class="w-full flex justify-between items-center p-3 text-left">
-                                            <div class="flex items-center">
-                                                <img src="{{ team.image or 'https://placehold.co/40x40/334155/e2e8f0?text=?' }}" alt="{{ team.name }} Logo" class="h-8 w-8 rounded-full object-cover mr-3">
-                                                <span class="font-bold text-slate-700 dark:text-slate-200">{{ team.name }}</span>
-                                            </div>
-                                            <svg class="w-5 h-5 text-slate-500 transform transition-transform" :class="{'rotate-180': open}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                                        </button>
-                                        <div x-show="open" x-transition class="p-3 border-t border-slate-300 dark:border-slate-600">
-                                            <p class="text-sm text-slate-600 dark:text-slate-300">
-                                                <strong>Latest Event:</strong> {{ latest_event.team_one }} vs {{ latest_event.team_two }}
-                                            </p>
-                                            <p class="text-sm text-slate-500 dark:text-slate-400">
-                                                <strong>Status:</strong> <span class="font-semibold">{{ latest_event.state }}</span>
-                                            </p>
-                                            <div class="mt-4 space-y-4">
-                                                {% for game in latest_event.match.games %}
-                                                <div class="border-t border-slate-300 dark:border-slate-600 pt-2">
-                                                     <h4 class="text-sm font-bold text-slate-600 dark:text-slate-400 mb-2">Game {{ loop.index }} Stats:</h4>
-                                                     <div class="grid grid-cols-2 gap-x-4">
-                                                        {% if game.gameTeams and game.gameTeams|length > 0 %}
-                                                        <div class="p-2 {% if game.gameTeams[0].team_name == team.name %}bg-blue-900/60 rounded-md{% endif %}">
-                                                            <h5 class="text-xs font-semibold text-center mb-1 {% if game.gameTeams[0].team_name == team.name %}text-white{% endif %}">{{ game.gameTeams[0].team_name }}</h5>
-                                                            <table class="w-full text-xs text-center text-slate-500 dark:text-slate-400"><tbody>
-                                                                {% for player in game.gameTeams[0].gamePlayers %}
-                                                                <tr><td class="text-left py-1">{{ player.name }}</td><td class="text-right py-1">{{ player.kills }}/{{ player.deaths }}/{{ player.assists }}</td></tr>
-                                                                {% endfor %}
-                                                            </tbody></table>
-                                                        </div>
-                                                        {% endif %}
-                                                        {% if game.gameTeams and game.gameTeams|length > 1 %}
-                                                        <div class="p-2 {% if game.gameTeams[1].team_name == team.name %}bg-blue-900/60 rounded-md{% else %}border-l border-slate-300 dark:border-slate-600{% endif %}">
-                                                            <h5 class="text-xs font-semibold text-center mb-1 {% if game.gameTeams[1].team_name == team.name %}text-white{% endif %}">{{ game.gameTeams[1].team_name }}</h5>
-                                                             <table class="w-full text-xs text-center text-slate-500 dark:text-slate-400"><tbody>
-                                                                {% for player in game.gameTeams[1].gamePlayers %}
-                                                                <tr><td class="text-left py-1">{{ player.name }}</td><td class="text-right py-1">{{ player.kills }}/{{ player.deaths }}/{{ player.assists }}</td></tr>
-                                                                {% endfor %}
-                                                            </tbody></table>
-                                                        </div>
-                                                        {% endif %}
-                                                     </div>
-                                                </div>
-                                                {% endfor %}
-                                            </div>
-                                            <div class="flex justify-end items-center mt-3">
-                                                 <button type="button" @click="handleTrackRequest('{{ url_for('untrack_team', team_id=team.id) }}').then(success => { if(success) $el.closest('li').remove(); })" class="bg-slate-600 hover:bg-red-600 text-white font-semibold py-1 px-3 text-xs rounded-md transition">Untrack</button>
-                                            </div>
-                                        </div>
-                                    </li>
-                                {% else %}
-                                    <li x-data class="bg-slate-200 dark:bg-slate-700/60 rounded-md p-3">
-                                        <div class="flex justify-between items-center">
-                                            <div class="flex items-center">
-                                                <img src="{{ team.image or 'https://placehold.co/40x40/334155/e2e8f0?text=?' }}" alt="{{ team.name }} Logo" class="h-8 w-8 rounded-full object-cover mr-3">
-                                                <span class="font-bold text-slate-700 dark:text-slate-200">{{ team.name }}</span>
-                                            </div>
-                                             <button type="button" @click="handleTrackRequest('{{ url_for('untrack_team', team_id=team.id) }}').then(success => { if(success) $el.closest('li').remove(); })" class="bg-slate-600 hover:bg-red-600 text-white font-semibold py-1 px-3 text-xs rounded-md transition">Untrack</button>
-                                        </div>
-                                        {% if latest_event %}
-                                            <div x-data="countdown('{{ latest_event.start_time }}')" x-init="init()" class="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                                                <p><strong>Next Event:</strong> {{ latest_event.team_one }} vs {{ latest_event.team_two }}</p>
-                                                <p><strong>Starts In:</strong> <span x-text="display" class="font-semibold text-blue-400"></span></p>
-                                                <a href="{{ url_for('show_event', id=latest_event.id) }}" class="inline-block mt-2 text-blue-500 hover:text-blue-400 font-semibold">View Match Details &rarr;</a>
-                                            </div>
-                                        {% else %}
-                                            <p class="text-slate-500 dark:text-slate-400 text-sm mt-2">No event history found.</p>
-                                        {% endif %}
-                                    </li>
-                                {% endif %}
-                            {% endfor %}
-                        </ul>
-                    {% else %}
-                        <p class="text-slate-500 dark:text-slate-400">You are not tracking any teams yet.</p>
-                    {% endif %}
-                </div>
+        <!-- Column for Tracked Players -->
+        <div>
+            <div class="flex justify-between items-center border-b-2 border-slate-200 dark:border-slate-700 pb-2 mb-4">
+                <h2 class="text-xl font-semibold text-slate-700 dark:text-slate-200">Tracked Players</h2>
+                {% if tracked_players %}
+                <form action="{{ url_for('untrack_all_players') }}" method="post">
+                    {{ form.hidden_tag() }}
+                    <button type="submit" class="bg-red-800 hover:bg-red-700 text-white font-semibold py-1 px-3 text-xs rounded-md transition">Untrack All</button>
+                </form>
+                {% endif %}
             </div>
-
-            <div>
-                 <div class="flex justify-between items-center border-b-2 border-slate-200 dark:border-slate-700 pb-2 mb-4">
-                    <h2 class="text-xl font-semibold text-slate-700 dark:text-slate-200">Tracked Players</h2>
-                    {% if tracked_players %}
-                    <form action="{{ url_for('untrack_all_players') }}" method="post">
-                        {{ form.hidden_tag() }}
-                        <button type="submit" class="bg-red-800 hover:bg-red-700 text-white font-semibold py-1 px-3 text-xs rounded-md transition duration-150 ease-in-out">
-                            Untrack All
-                        </button>
-                    </form>
-                    {% endif %}
-                </div>
-                <div class="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4 min-h-[200px]">
-                     {% if tracked_players %}
-                        <ul class="space-y-3">
-                            {% for player, latest_event in tracked_players %}
-                                <li class="bg-slate-200 dark:bg-slate-700/60 rounded-md">
-                                {% if latest_event and latest_event.state in ['inProgress', 'completed'] %}
-                                    <div x-data="{ open: false }">
-                                        <button @click="open = !open" class="w-full flex justify-between items-center p-3 text-left">
-                                            <div class="flex items-center">
-                                                <img src="{{ player.image or 'https://placehold.co/40x40/334155/e2e8f0?text=?' }}" alt="{{ player.name }} Logo" class="h-8 w-8 rounded-full object-cover mr-3">
-                                                <span class="font-bold text-slate-700 dark:text-slate-200">{{ player.name }}</span>
-                                            </div>
-                                            <svg class="w-5 h-5 text-slate-500 transform transition-transform" :class="{'rotate-180': open}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                                        </button>
-                                        <div x-show="open" x-transition class="p-3 border-t border-slate-300 dark:border-slate-600">
-                                            <p class="text-sm text-slate-600 dark:text-slate-300"><strong>Latest Event:</strong> {{ latest_event.team_one }} vs {{ latest_event.team_two }}</p>
-                                            <p class="text-sm text-slate-500 dark:text-slate-400"><strong>Status:</strong> <span class="font-semibold">{{ latest_event.state }}</span></p>
-                                            <div class="mt-4 space-y-4">
-                                                {% for game in latest_event.match.games %}
-                                                <div class="border-t border-slate-300 dark:border-slate-600 pt-2">
-                                                    <h4 class="text-sm font-bold text-slate-600 dark:text-slate-400 mb-2">Game {{ loop.index }} Stats:</h4>
-                                                    <div class="grid grid-cols-2 gap-x-4">
-                                                        {% if game.gameTeams and game.gameTeams|length >= 2 %}
-                                                        <div>
-                                                            <h5 class="text-xs font-semibold text-center mb-1">{{ game.gameTeams[0].team_name }}</h5>
-                                                            <table class="w-full text-xs text-center text-slate-500 dark:text-slate-400"><tbody>
-                                                                {% for player_stat in game.gameTeams[0].gamePlayers %}
-                                                                <tr class="{% if player_stat.name == player.name %}bg-blue-900/60 font-semibold text-white{% else %}border-b border-transparent{% endif %}"><td class="text-left py-1 px-2 rounded-l-md">{{ player_stat.name }}</td><td class="text-right py-1 px-2 rounded-r-md">{{ player_stat.kills }}/{{ player_stat.deaths }}/{{ player_stat.assists }}</td></tr>
-                                                                {% endfor %}
-                                                            </tbody></table>
-                                                        </div>
-                                                        <div class="border-l border-slate-300 dark:border-slate-600 pl-4">
-                                                            <h5 class="text-xs font-semibold text-center mb-1">{{ game.gameTeams[1].team_name }}</h5>
-                                                            <table class="w-full text-xs text-center text-slate-500 dark:text-slate-400"><tbody>
-                                                                {% for player_stat in game.gameTeams[1].gamePlayers %}
-                                                                <tr class="{% if player_stat.name == player.name %}bg-blue-900/60 font-semibold text-white{% else %}border-b border-transparent{% endif %}"><td class="text-left py-1 px-2 rounded-l-md">{{ player_stat.name }}</td><td class="text-right py-1 px-2 rounded-r-md">{{ player_stat.kills }}/{{ player_stat.deaths }}/{{ player_stat.assists }}</td></tr>
-                                                                {% endfor %}
-                                                            </tbody></table>
-                                                        </div>
-                                                        {% endif %}
-                                                    </div>
-                                                </div>
-                                                {% endfor %}
-                                            </div>
-                                            <div class="flex justify-end items-center mt-3">
-                                                <button type="button" @click="handleTrackRequest('{{ url_for('untrack_player', player_id=player.id) }}').then(success => { if(success) $el.closest('li').remove(); })" class="bg-slate-600 hover:bg-red-600 text-white font-semibold py-1 px-3 text-xs rounded-md transition">Untrack</button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                {% else %}
-                                     <div x-data class="p-3">
-                                        <div class="flex justify-between items-center">
-                                            <div class="flex items-center">
-                                                <img src="{{ player.image or 'https://placehold.co/40x40/334155/e2e8f0?text=?' }}" alt="{{ player.name }} Logo" class="h-8 w-8 rounded-full object-cover mr-3">
-                                                <span class="font-bold text-slate-700 dark:text-slate-200">{{ player.name }}</span>
-                                            </div>
-                                            <button type="button" @click="handleTrackRequest('{{ url_for('untrack_player', player_id=player.id) }}').then(success => { if(success) $el.closest('li').remove(); })" class="bg-slate-600 hover:bg-red-600 text-white font-semibold py-1 px-3 text-xs rounded-md transition">Untrack</button>
-                                        </div>
-                                        {% if latest_event %}
-                                            <div x-data="countdown('{{ latest_event.start_time }}')" x-init="init()" class="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                                                <p><strong>Next Event:</strong> {{ latest_event.team_one }} vs {{ latest_event.team_two }}</p>
-                                                <p><strong>Starts In:</strong> <span x-text="display" class="font-semibold text-blue-400"></span></p>
-                                                <a href="{{ url_for('show_event', id=latest_event.id) }}" class="inline-block mt-2 text-blue-500 hover:text-blue-400 font-semibold">View Match Details &rarr;</a>
-                                            </div>
-                                        {% else %}
-                                            <p class="text-slate-500 dark:text-slate-400 text-sm mt-2">No event history found.</p>
-                                        {% endif %}
-                                    </div>
-                                {% endif %}
-                                </li>
-                            {% endfor %}
-                        </ul>
-                    {% else %}
-                        <p class="text-slate-500 dark:text-slate-400">You are not tracking any players yet.</p>
-                    {% endif %}
-                </div>
+            <div class="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4 min-h-[200px]">
+                {% if tracked_players %}
+                    <ul class="space-y-3">
+                        {% for item in tracked_players %}
+                        <li class="bg-slate-200 dark:bg-slate-700/60 rounded-md p-3"
+                            data-item-id="{{ item.id }}"
+                            data-match-id="{{ item.event.match_id }}"
+                            data-sport-name="{{ item.event.league.sport.name }}"
+                            data-tracked-player-id="{{ item.player.external_id }}">
+                            {% include 'partials/_dashboard_item.html' %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="text-slate-500 dark:text-slate-400">You are not tracking any players yet.</p>
+                {% endif %}
             </div>
         </div>
     </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        console.log("Connecting to user dashboard SSE stream...");
+        const eventSource = new EventSource("{{ url_for('dashboard_stream') }}");
+
+        function highlightElement(element) {
+            if (!element) return;
+            element.classList.remove('highlight-update');
+            void element.offsetWidth;
+            element.classList.add('highlight-update');
+        }
+
+        function updateCell(id, newValue) {
+            const cell = document.getElementById(id);
+            if (cell && cell.textContent.trim() !== newValue.toString()) {
+                cell.textContent = newValue;
+                highlightElement(cell.closest('tr') || cell);
+            }
+        }
+
+        eventSource.onmessage = function(event) {
+            const matchData = JSON.parse(event.data);
+            const matchId = matchData.match_id || matchData.id;
+            const listItems = document.querySelectorAll(`li[data-match-id="${matchId}"]`);
+            if (!listItems) return;
+            listItems.forEach(listItem => {
+                const trackedPlayerId = listItem.dataset.trackedPlayerId;
+                const trackedTeamId = listItem.dataset.trackedTeamId;
+                const sportName = listItem.dataset.sportName;
+                const itemId = listItem.dataset.itemId;
+                const unstartedView = document.getElementById(`unstarted-view-${itemId}`);
+                const statsView = document.getElementById(`stats-view-${itemId}`);
+                const statusSpan = document.getElementById(`status-span-${itemId}`);
+                if (statusSpan) statusSpan.textContent = matchData.state;
+                if (matchData.state !== 'unstarted') {
+                    if (unstartedView) unstartedView.style.display = 'none';
+                    if (statsView) statsView.style.display = 'block';
+                } else {
+                    if (unstartedView) unstartedView.style.display = 'block';
+                    if (statsView) statsView.style.display = 'none';
+                }
+                if (sportName === 'League of Legends') {
+                    matchData.games.forEach(game => {
+                        // Update all player stats in the box score using the unique item ID
+                        for (const p_id in game.participants) {
+                            const p_stat = game.participants[p_id];
+                            updateCell(`item-${itemId}-game-${game.game_id}-player-${p_stat.p_id}-kda`, `${p_stat.kills}/${p_stat.deaths}/${p_stat.assists}`);
+                        }
+
+                        if (trackedPlayerId) {
+                            for (const p_id in game.participants) {
+                                const p_stat = game.participants[p_id];
+                                if (String(p_stat.id) === String(trackedPlayerId)) {
+                                    updateCell(`item-${itemId}-game-${game.game_id}-kda`, `${p_stat.kills}/${p_stat.deaths}/${p_stat.assists}`);
+                                    updateCell(`item-${itemId}-game-${game.game_id}-cs`, p_stat.creeps);
+                                }
+                            }
+                        }
+                    });
+                } else if (sportName === 'Baseball') {
+                    if (trackedTeamId) {
+                        if (matchData.away_team) {
+                            if (String(matchData.away_team.id) === String(trackedTeamId)) {
+                                highlightElement(document.getElementById(`item-${itemId}-mlb-match-${matchId}-team-${matchData.away_team.id}-box`));
+                            }
+                            for (const playerId in matchData.away_team.players) {
+                                updateCell(`item-${itemId}-mlb-match-${matchId}-player-${playerId}-summary`, matchData.away_team.players[playerId].summary);
+                            }
+                        }
+                        if (matchData.home_team) {
+                            if (String(matchData.home_team.id) === String(trackedTeamId)) {
+                                highlightElement(document.getElementById(`item-${itemId}-mlb-match-${matchId}-team-${matchData.home_team.id}-box`));
+                            }
+                            for (const playerId in matchData.home_team.players) {
+                                updateCell(`item-${itemId}-mlb-match-${matchId}-player-${playerId}-summary`, matchData.home_team.players[playerId].summary);
+                            }
+                        }
+                    } else if (trackedPlayerId) {
+                        const allPlayers = { ...matchData.away_team.players, ...matchData.home_team.players };
+                        if (allPlayers[trackedPlayerId]) {
+                            updateCell(`item-${itemId}-summary`, allPlayers[trackedPlayerId].summary);
+                        }
+                    }
+                }
+            });
+        };
+
+        eventSource.onerror = function(err) {
+            console.error("Dashboard EventSource failed:", err);
+            eventSource.close();
+        };
+    });
+</script>
 {% endblock %}

@@ -7,6 +7,16 @@
     <meta name="csrf-token" content="{{ generate_csrf() }}">
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+    .highlight-update {
+        animation: highlight-fade 1.5s ease-out;
+    }
+
+    @keyframes highlight-fade {
+        0% { background-color: rgba(255, 255, 0, 0.5); } /* Start with a semi-transparent yellow */
+        100% { background-color: transparent; } /* Fade to transparent */
+    }
+</style>
 </head>
 <body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200">
 
@@ -15,7 +25,7 @@
             <div class="flex items-center justify-between h-16">
                 <div class="flex items-center">
                     <a href="{{ url_for('dashboard') if current_user.is_authenticated else url_for('login') }}" class="text-white font-bold text-xl hover:text-blue-300 transition">
-                        Esports Tracker
+                        Pick Tracker
                     </a>
                 </div>
                 <div class="hidden md:block">
@@ -65,7 +75,7 @@
                     }, 1000);
                 },
                 update() {
-                    let date = new Date(this.expiry.replace('Z', ''));
+                    let date = new Date(this.expiry);
                     let now = new Date();
                     let diff = date.getTime() - now.getTime();
 
@@ -90,36 +100,44 @@
                 }
             }
         }
-       function handleTrackRequest(url) {
-            const csrf_token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        function handleTrackRequest(url) {
+            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+            if (!csrfToken) {
+                console.error('CSRF Token not found! Make sure you have the meta tag in your base.html.');
+                return Promise.resolve(false); // Return a resolved promise with 'false'
+            }
 
             return fetch(url, {
                 method: 'POST',
                 headers: {
-                    'X-CSRFToken': csrf_token,
-                    'Content-Type': 'application/x-www-form-urlencoded'
+                    'X-CSRFToken': csrfToken,
+                    'Content-Type': 'application/json' // Use JSON content type
                 },
-                body: 'csrf_token=' + encodeURIComponent(csrf_token)
+                body: JSON.stringify({})
             })
             .then(response => {
                 if (!response.ok) {
-                    throw new Error('Network response was not ok');
+                    // If the server responds with an error (like 400 or 500), throw an error
+                    // to be caught by the .catch() block.
+                    throw new Error(`Network response was not ok. Status: ${response.status}`);
                 }
                 return response.json();
             })
             .then(data => {
                 if (data.status === 'success') {
-                    return true;
+                    console.log('Request successful:', data);
+                    return true; // Indicate success
                 } else {
-                    console.error('Tracking request failed:', data.message);
-                    alert('An error occurred. Please try again.');
-                    return false;
+                    // Log the specific error message from your Flask backend
+                    console.error('Tracking request failed:', data.message || 'Unknown error');
+                    return false; // Indicate failure
                 }
             })
             .catch(error => {
+                // This will catch network errors or errors thrown from the .then() block
                 console.error('Fetch Error:', error);
-                alert('A network error occurred. Please try again.');
-                return false;
+                return false; // Indicate failure
             });
         }
     </script>
