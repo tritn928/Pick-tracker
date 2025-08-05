@@ -1,12 +1,10 @@
 <div class="mt-2 text-sm text-slate-600 dark:text-slate-300">
     {% if item.player %}
+        {# Logic for a tracked player: Show their stats for EACH game #}
         <div class="space-y-1 mt-2">
             {% for game in match_data.games %}
                 {% set player_id_to_find = item.player.external_id %}
-
-                {# Use a namespace to store the found stat block #}
                 {% set found = namespace(player_stat=none) %}
-
                 {# Find the player's stats in this specific game #}
                 {% for p in game.participants.values() %}
                     {% if p.id == player_id_to_find %}
@@ -17,7 +15,8 @@
                 {% if found.player_stat %}
                 <div class="font-mono text-xs p-2 bg-slate-900/50 rounded">
                     Game {{ loop.index }}:
-                    K/D/A: <span id="item-{{ item.id }}-game-{{ game.game_id }}-kda" class="font-semibold">{{ found.player_stat.kills }}/{{ found.player_stat.deaths }}/{{ found.player_stat.assists }}</span>
+                    K/D/A: <span id="item-{{ item.id }}-game-{{ game.game_id }}-kda" class="font-semibold">{{ found.player_stat.kills }}/{{ found.player_stat.deaths }}/{{ found.player_stat.assists }}</span> |
+                    CS: <span id="item-{{ item.id }}-game-{{ game.game_id }}-cs" class="font-semibold">{{ found.player_stat.creeps }}</span>
                 </div>
                 {% endif %}
             {% endfor %}
@@ -31,30 +30,26 @@
                 <h4 class="text-sm font-bold text-slate-600 dark:text-slate-400 mb-2">Game {{ loop.index }} Stats:</h4>
                 <div class="grid grid-cols-2 gap-x-4">
                     <!-- Blue Team -->
-                    <div class="p-2 {% if game.blue_team.name == item.team.name %}bg-blue-900/60 rounded-md{% endif %}">
-                        <h5 class="text-xs font-semibold text-center mb-1 {% if game.blue_team.name == item.team.name %}text-white{% endif %}">{{ game.blue_team.name }}</h5>
+                    <div id="item-{{item.id}}-game-{{game.game_id}}-team-{{game.blue_team.id}}-box" class="p-2 {% if game.blue_team.id == item.team.id %}bg-blue-900/60 rounded-md{% else %}border-l border-slate-300 dark:border-slate-600 pl-4{% endif %}">
+                        <h5 class="text-xs font-semibold text-center mb-1 {% if game.blue_team.id == item.team.id %}text-white{% endif %}">{{ game.blue_team.name }}</h5>
                         <table class="w-full text-xs text-center"><tbody>
-                            {% for p_id, p_stat in game.participants.items() %}
-                                {% if p_id|int <= 5 %}
-                                <tr class="border-b border-transparent">
-                                    <td class="text-left py-1 px-2">{{ p_stat.name }}</td>
-                                    <td class="text-right py-1 px-2">{{ p_stat.kills }}/{{ p_stat.deaths }}/{{ p_stat.assists }}</td>
-                                </tr>
-                                {% endif %}
+                            {% for p_id, p_stat in game.participants.items() if p_id|int <= 5 %}
+                            <tr>
+                                <td class="text-left py-1 px-2">{{ p_stat.name }}</td>
+                                <td id="item-{{item.id}}-game-{{game.game_id}}-player-{{p_stat.p_id}}-kda" class="text-right py-1 px-2">{{ p_stat.kills }}/{{ p_stat.deaths }}/{{ p_stat.assists }}</td>
+                            </tr>
                             {% endfor %}
                         </tbody></table>
                     </div>
                     <!-- Red Team -->
-                    <div class="p-2 {% if game.red_team.name == item.team.name %}bg-blue-900/60 rounded-md{% else %}border-l border-slate-300 dark:border-slate-600 pl-4{% endif %}">
-                        <h5 class="text-xs font-semibold text-center mb-1 {% if game.red_team.name == item.team.name %}text-white{% endif %}">{{ game.red_team.name }}</h5>
+                    <div id="item-{{item.id}}-game-{{game.game_id}}-team-{{game.red_team.id}}-box" class="p-2 {% if game.red_team.id == item.team.id %}bg-blue-900/60 rounded-md{% else %}border-l border-slate-300 dark:border-slate-600 pl-4{% endif %}">
+                        <h5 class="text-xs font-semibold text-center mb-1 {% if game.red_team.id == item.team.id %}text-white{% endif %}">{{ game.red_team.name }}</h5>
                         <table class="w-full text-xs text-center"><tbody>
-                            {% for p_id, p_stat in game.participants.items() %}
-                                {% if p_id|int > 5 %}
-                                <tr class="border-b border-transparent">
-                                    <td class="text-left py-1 px-2">{{ p_stat.name }}</td>
-                                    <td class="text-right py-1 px-2">{{ p_stat.kills }}/{{ p_stat.deaths }}/{{ p_stat.assists }}</td>
-                                </tr>
-                                {% endif %}
+                            {% for p_id, p_stat in game.participants.items() if p_id|int > 5 %}
+                            <tr>
+                                <td class="text-left py-1 px-2">{{ p_stat.name }}</td>
+                                <td id="item-{{item.id}}-game-{{game.game_id}}-player-{{p_stat.p_id}}-kda" class="text-right py-1 px-2">{{ p_stat.kills }}/{{ p_stat.deaths }}/{{ p_stat.assists }}</td>
+                            </tr>
                             {% endfor %}
                         </tbody></table>
                     </div>

@@ -14,7 +14,7 @@ beat_schedule = {
     },
     'check-events-every-5-minutes': {
         'task': 'app.tasks.check_and_start_polling',
-        'schedule': crontab(minute='*/5'),
+        'schedule': crontab(minute='*'),
     },
     'check-unstarted-events-every-hour': {
         'task': 'app.tasks.check_unstarted_events',

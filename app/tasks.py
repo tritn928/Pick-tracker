@@ -120,7 +120,7 @@ def populate_unstarted_lol_event(event:Event):
                 db.session.add(match_team)
                 continue
             # Get Canonical Team
-            canonical_team = get_or_create_canonical_team(api_team_data, event.league)
+            canonical_team = get_or_create_canonical_team(api_team_data, event.league, sport='LoL')
             db.session.flush()
 
             # Create MatchTeam
@@ -253,11 +253,11 @@ def seed_leagues_task():
     ignore = ['LCL', "TFT Esports ", 'LCS', "King's Duel", 'Worlds Qualifying Series', 'LCO', 'LLA', 'CBLOL',
               'Arabian League']
     # temp change to only include MSI for testing
-    #include = ['MSI']
+    include = ['MSI', 'LCK', 'LPL', 'LCK Challengers']
     leagues_list = lolapi.get_leagues()
     lol_to_add = [
         League(name=league['name'], sport_id=lol_sport.id, league_id=league['id'], image=league['image'], sport=lol_sport)
-        for league in leagues_list if league['name'] not in ignore
+        for league in leagues_list if league['name'] in include
     ]
     # Not worrying about separate MLB Leagues for now.
     mlb_to_add = League(name='MLB', sport_id=mlb_sport.id, league_id='1', image='https://www.mlbstatic.com/team-logos/league-on-dark/1.svg', sport=mlb_sport)
@@ -843,9 +843,8 @@ def store_final_lol_results_in_db(final_match_object, event: Event):
                 game_obj = Game(
                     game_id=api_game_data.game_id
                 )
-                game_obj.match = final_match_object
+                game_obj.match = event.match
                 db.session.add(game_obj)
-
                 # Create blue GameTeam
                 blue_canonical_team_for_game = CanonicalTeam.query.filter_by(
                     external_id=api_game_data.blue_team.id).first()
@@ -867,7 +866,6 @@ def store_final_lol_results_in_db(final_match_object, event: Event):
                 red_game_team.game = game_obj
                 red_game_team.canonical_team = red_canonical_team_for_game
                 db.session.add(red_game_team)
-
                 # Create GamePlayers
                 for p_id, playerStats in api_game_data.participants.items():
                     if p_id < 6:
@@ -925,7 +923,6 @@ def store_final_lol_results_in_db(final_match_object, event: Event):
                                 f"Could not find MatchTeam for substitute player {canonical_player_for_stats.name} (associated with CTeam {canonical_team_for_game.name}) in Match for Event PK {event.id}. Skipping GPP.")
                             continue
                     db.session.flush()
-                    # Add a player's stats for a game and pair it to the MatchPlayer and CanonicalPlayer
 
                     player_stats_dict = {
                         'p_id': playerStats.p_id,
@@ -975,19 +972,18 @@ def store_final_mlb_results_in_db(final_match_object, event:Event):
         away_game_canonical_team = CanonicalTeam.query.filter_by(external_id=str(final_match_object.away_team.id)).first()
         home_game_team = GameTeam.query.filter_by(game=event.match.games[0], canonical_team=home_game_canonical_team).first()
         away_game_team = GameTeam.query.filter_by(game=event.match.games[0], canonical_team=away_game_canonical_team).first()
-        if not home_game_team and not away_game_team:
+        if not home_game_team:
             home_game_team = GameTeam(
                 team_id=str(home_game_canonical_team.external_id),
                 team_name=home_game_canonical_team.name,
-                image=f"https://www.mlbstatic.com/team-logos/team-cap-on-dark/{final_match_object.home_team.id}.svg"
             )
             home_game_team.game = game_obj
             home_game_team.canonical_team = home_game_canonical_team
             db.session.add(home_game_team)
+        if not away_game_team:
             away_game_team = GameTeam(
                 team_id=str(away_game_canonical_team.external_id),
                 team_name=away_game_canonical_team.name,
-                image=f"https://www.mlbstatic.com/team-logos/team-cap-on-dark/{final_match_object.away_team.id}.svg"
             )
             away_game_team.game = game_obj
             away_game_team.canonical_team = away_game_canonical_team
@@ -1030,12 +1026,10 @@ def store_final_mlb_results_in_db(final_match_object, event:Event):
                     db.session.add(match_player_for_stats)
                     mlb_current_match_players_map[
                         str(canonical_player_for_stats.external_id)] = match_player_for_stats
-                    current_app.logger.info("Created MatchPlayer sub in MLB")
                 else:
-                    current_app.logger.info("MatchPlayer sub not found, skipping")
                     continue
             db.session.flush()
-            gpp = GamePlayerPerformance.query.filter_by(gameTeam=home_game_team, canonical_player=canonical_player_for_stats)
+            gpp = GamePlayerPerformance.query.filter_by(gameTeam=home_game_team, canonical_player=canonical_player_for_stats).first()
             player_stats_dict = {
                 'name': player_data.name,
                 'position': player_data.position,
@@ -1097,13 +1091,11 @@ def store_final_mlb_results_in_db(final_match_object, event:Event):
                     db.session.add(match_player_for_stats)
                     mlb_current_match_players_map[
                         str(canonical_player_for_stats.external_id)] = match_player_for_stats
-                    current_app.logger.info("Created MatchPlayer sub in MLB")
                 else:
-                    current_app.logger.info("MatchPlayer sub not found, skipping")
                     continue
             db.session.flush()
             gpp = GamePlayerPerformance.query.filter_by(gameTeam=away_game_team,
-                                                        canonical_player=canonical_player_for_stats)
+                                                        canonical_player=canonical_player_for_stats).first()
             player_stats_dict = {
                 'name': player_data.name,
                 'position': player_data.position,
@@ -1137,9 +1129,8 @@ def store_final_mlb_results_in_db(final_match_object, event:Event):
         current_app.logger.error(f"❌ Failed to store match for event {event.id}. Error: {e} in MLB", exc_info=True)
         db.session.rollback()
 
-def handle_baseball_update(event:Event):
+def handle_baseball_update(event:Event, lock):
     redis_key = f"match_state:{event.match_id}"
-    lock_key = f"polling_lock:{event.match_id}"
     try:
         # Initial Creation
         current_app.logger.info(f"POLLER: Creating initial state for match {event.match_id}...")
@@ -1154,7 +1145,7 @@ def handle_baseball_update(event:Event):
         ]
 
         cache.set(redis_key, match_object, timeout=6 * 60 * 60)  # Store for 6 hours
-
+        last_renewed = time.time()
         # The Update Loop
         while match_object and match_object.state != 'Final':
             current_app.logger.info(f"POLLER: Polling for updates on match {event.match_id}...")
@@ -1171,6 +1162,13 @@ def handle_baseball_update(event:Event):
                 for user_id in user_ids_tracking_this_match:
                     channel = f"user-updates:{user_id}"
                     redis_client.publish(channel, payload)
+
+            now = time.time()
+            if now - last_renewed > 120:
+                lock.extend(120)
+                current_app.logger.debug(f"POLLER: Extended lock for match {event.match_id}")
+                last_renewed = now
+
             time.sleep(20)
 
         # Finalization
@@ -1183,11 +1181,9 @@ def handle_baseball_update(event:Event):
         # Clean up Redis keys when the task is done
         current_app.logger.info(f"POLLER: Cleaning up Redis keys for match {event.match_id}.")
         cache.delete(redis_key)
-        cache.delete(lock_key)
 
-def handle_lol_update(event:Event):
+def handle_lol_update(event:Event, lock):
     redis_key = f"match_state:{event.match_id}"
-    lock_key = f"polling_lock:{event.match_id}"
     try:
         # Initial Creation
         current_app.logger.info(f"POLLER: Creating initial state for match {event.match_id}...")
@@ -1200,7 +1196,7 @@ def handle_lol_update(event:Event):
         ]
 
         cache.set(redis_key, match_object, timeout=6 * 60 * 60)  # Store for 6 hours
-
+        last_renewed = time.time()
         # The Update Loop
         while match_object and match_object.state != 'completed':
             current_app.logger.info(f"POLLER: Polling for updates on match {event.match_id}...")
@@ -1219,6 +1215,13 @@ def handle_lol_update(event:Event):
                 for user_id in user_ids_tracking_this_match:
                     channel = f"user-updates:{user_id}"
                     redis_client.publish(channel, payload)
+
+            now = time.time()
+            if now - last_renewed > 120:
+                lock.extend(120)
+                current_app.logger.debug(f"POLLER: Extended lock for match {event.match_id}")
+                last_renewed = now
+
             time.sleep(20)
 
         # Finalization
@@ -1231,57 +1234,31 @@ def handle_lol_update(event:Event):
         # Clean up Redis keys when the task is done
         current_app.logger.info(f"POLLER: Cleaning up Redis keys for match {event.match_id}.")
         cache.delete(redis_key)
-        cache.delete(lock_key)
 
 @celery.task(bind=True)
 def poll_live_match_data(self, event_id):
     event = Event.query.get(event_id)
     sport = event.league.sport.name
-    if sport == 'Baseball':
-        handle_baseball_update(event)
-    else:
-        handle_lol_update(event)
-
-@celery.task(bind=True)
-def start_match_polling_chain(self, event_id):
-    """
-    Safely starts the polling process for an event.
-    - Updates the event state to 'inProgress'.
-    - Sets a Redis lock to prevent duplicate polling chains.
-    - Kicks off the first run of the 'update_in_progress_match' task.
-    This task is idempotent: calling it multiple times for the same active
-    event will have no negative effect.
-    """
-    try:
-        event = Event.query.get(event_id)
-        if not event:
-            current_app.logger.error(f"Task 'start_match_polling_chain' could not find event {event_id}.")
-            return
-
-        lock_key = f"polling_lock_match_{event.match_id}"
-
-        # If a lock already exists, another process has already started this. We can safely exit.
-        if cache.get(lock_key):
-            current_app.logger.info(f"Polling for match {event.match_id} is already active. Skipping start request.")
-            return
-
-        current_app.logger.info(f"Match {event.match_id} is starting. Kicking off polling chain.")
-
-        # 1. Update the event state
+    if event.state == 'unstarted':
+        current_app.logger.info(f"POLLER: Claiming event {event.id} and setting state to inProgress.")
         event.state = 'inProgress'
         db.session.commit()
-
-        # 2. Set the lock to prevent other tasks from starting a duplicate chain
-        cache.set(lock_key, "locked", timeout=300)  # 5-minute safety timeout
-
-        # 3. Kick off the first run of the actual polling task
-        poll_live_match_data.delay(event.id)
-    except OperationalError as exc:
-        raise self.retry(exc=exc, countdown=60, max_retries=3)
-
-    except Exception as exc:
-        current_app.logger.error("NONOperationalError Exception")
-        raise
+    lock_key = f"polling_lock:{event.match_id}"
+    ttl = redis_client.ttl(lock_key)
+    exists = redis_client.exists(lock_key)
+    current_app.logger.info(f"Polling {event.match_id} | lock exists: {exists}, TTL: {ttl}")
+    lock = redis_client.lock(lock_key, timeout=300)
+    if not lock.acquire(blocking=False):
+        current_app.logger.debug(f"Lock already held for match {event.match_id}, skipping.")
+        return
+    current_app.logger.info(f"Acquired lock for match {event.match_id}. Kicking off polling task.")
+    try:
+        if sport == 'Baseball':
+            handle_baseball_update(event, lock)
+        else:
+            handle_lol_update(event, lock)
+    finally:
+        lock.release()
 
 @celery.task(bind=True)
 def check_unstarted_events(self):
@@ -1325,18 +1302,7 @@ def check_and_start_polling(self):
             if event.start_time_datetime.replace(tzinfo=timezone.utc) > now:
                 continue
 
-            lock_key = f"polling_lock:{event.match_id}"
-
-            # Try to acquire a lock. nx=True means set only if it doesn't exist.
-            # ex=3600 sets a 1-hour timeout on the lock as a safety measure.
-            lock_acquired = redis_client.set(lock_key, "locked", ex=300, nx=True)
-
-            if lock_acquired:
-                current_app.logger.info(f"SUPERVISOR: Acquired lock for match {event.match_id}. Kicking off polling task.")
-                event.state = 'inProgress'
-                poll_live_match_data.delay(event.id)
-            else:
-                current_app.logger.debug(f"SUPERVISOR: Match {event.match_id} is already being polled. Skipping.")
+            poll_live_match_data.delay(event.id)
         current_app.logger.info("Finished scheduling start jobs.")
     except OperationalError as exc:
         raise self.retry(exc=exc, countdown=60, max_retries=3)

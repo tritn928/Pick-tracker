@@ -114,18 +114,18 @@ def mlb_convert_db_match_to_dict(db_match):
         "id": db_match.event.match_id,
         "state": db_match.event.state,
         "home_team": {
-            "id": home_team_data.canonical_team.id if home_team_data else None,
+            "id": home_team_data.canonical_team.external_id if home_team_data else None,
             "name": home_team_data.team_name if home_team_data else "TBD",
             "players": {
-                p.match_player.canonical_player.id: p.stats
+                p.match_player.canonical_player.external_id: p.stats
                 for p in home_team_data.gamePlayers if p.match_player and p.match_player.canonical_player
             } if home_team_data else {}
         },
         "away_team": {
-            "id": away_team_data.canonical_team.id if away_team_data else None,
+            "id": away_team_data.canonical_team.external_id if away_team_data else None,
             "name": away_team_data.team_name if away_team_data else "TBD",
             "players": {
-                p.match_player.canonical_player.id: p.stats
+                p.match_player.canonical_player.external_id: p.stats
                 for p in away_team_data.gamePlayers if p.match_player and p.match_player.canonical_player
             } if away_team_data else {}
         }

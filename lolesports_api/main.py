@@ -10,7 +10,7 @@ def main():
     leaguesList = lolapi.get_leagues()
     event_schedule = lolapi.get_schedule(league_name='MSI', league_id='98767991325878492')
     print(event_schedule)
-    match = lolapi.get_match('113470922764572294')
+    match = lolapi.get_match('113470922758018585')
     print(match.to_dict())
 
 

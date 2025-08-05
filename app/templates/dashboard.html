@@ -22,7 +22,11 @@
                 {% if tracked_teams %}
                     <ul class="space-y-3">
                         {% for item in tracked_teams %}
-                        <li class="bg-slate-200 dark:bg-slate-700/60 rounded-md p-3" data-item-id="{{ item.id }}" data-sport-name="{{ item.event.league.sport.name }}">
+                        <li class="bg-slate-200 dark:bg-slate-700/60 rounded-md p-3"
+                            data-item-id="{{ item.id }}"
+                            data-match-id="{{ item.event.match_id }}"
+                            data-sport-name="{{ item.event.league.sport.name }}"
+                            data-tracked-team-id="{{ item.team.external_id }}">
                             {% include 'partials/_dashboard_item.html' %}
                         </li>
                         {% endfor %}
@@ -48,7 +52,11 @@
                 {% if tracked_players %}
                     <ul class="space-y-3">
                         {% for item in tracked_players %}
-                        <li class="bg-slate-200 dark:bg-slate-700/60 rounded-md p-3" data-item-id="{{ item.id }}" data-sport-name="{{ item.event.league.sport.name }}">
+                        <li class="bg-slate-200 dark:bg-slate-700/60 rounded-md p-3"
+                            data-item-id="{{ item.id }}"
+                            data-match-id="{{ item.event.match_id }}"
+                            data-sport-name="{{ item.event.league.sport.name }}"
+                            data-tracked-player-id="{{ item.player.external_id }}">
                             {% include 'partials/_dashboard_item.html' %}
                         </li>
                         {% endfor %}
@@ -84,59 +92,68 @@
         eventSource.onmessage = function(event) {
             const matchData = JSON.parse(event.data);
             const matchId = matchData.match_id || matchData.id;
-
-            const listItem = document.querySelector(`li[data-match-id="${matchId}"]`);
-            if (!listItem) return;
-
-            const trackedPlayerId = listItem.dataset.trackedPlayerId;
-            const trackedTeamId = listItem.dataset.trackedTeamId;
-            const sportName = listItem.dataset.sportName;
-            const itemId = listItem.dataset.itemId;
-
-            if (sportName === 'League of Legends') {
-                matchData.games.forEach(game => {
-                    if (trackedTeamId) {
-                        if (game.blue_team && game.blue_team.id == trackedTeamId) {
-                            highlightElement(document.getElementById(`lol-game-${game.game_id}-team-${game.blue_team.id}-box`));
-                        }
-                        if (game.red_team && game.red_team.id == trackedTeamId) {
-                            highlightElement(document.getElementById(`lol-game-${game.game_id}-team-${game.red_team.id}-box`));
-                        }
+            const listItems = document.querySelectorAll(`li[data-match-id="${matchId}"]`);
+            if (!listItems) return;
+            listItems.forEach(listItem => {
+                const trackedPlayerId = listItem.dataset.trackedPlayerId;
+                const trackedTeamId = listItem.dataset.trackedTeamId;
+                const sportName = listItem.dataset.sportName;
+                const itemId = listItem.dataset.itemId;
+                const unstartedView = document.getElementById(`unstarted-view-${itemId}`);
+                const statsView = document.getElementById(`stats-view-${itemId}`);
+                const statusSpan = document.getElementById(`status-span-${itemId}`);
+                if (statusSpan) statusSpan.textContent = matchData.state;
+                if (matchData.state !== 'unstarted') {
+                    if (unstartedView) unstartedView.style.display = 'none';
+                    if (statsView) statsView.style.display = 'block';
+                } else {
+                    if (unstartedView) unstartedView.style.display = 'block';
+                    if (statsView) statsView.style.display = 'none';
+                }
+                if (sportName === 'League of Legends') {
+                    matchData.games.forEach(game => {
+                        // Update all player stats in the box score using the unique item ID
                         for (const p_id in game.participants) {
                             const p_stat = game.participants[p_id];
-                            updateCell(`lol-game-${game.game_id}-player-${p_stat.p_id}-kda`, `${p_stat.kills}/${p_stat.deaths}/${p_stat.assists}`);
+                            updateCell(`item-${itemId}-game-${game.game_id}-player-${p_stat.p_id}-kda`, `${p_stat.kills}/${p_stat.deaths}/${p_stat.assists}`);
                         }
-                    } else if (trackedPlayerId) {
-                        for (const p_id in game.participants) {
-                            const p_stat = game.participants[p_id];
-                            if (p_stat.id == trackedPlayerId) {
-                                updateCell(`item-${itemId}-game-${game.game_id}-kda`, `${p_stat.kills}/${p_stat.deaths}/${p_stat.assists}`);
-                                updateCell(`item-${itemId}-game-${game.game_id}-cs`, p_stat.creeps);
+
+                        if (trackedPlayerId) {
+                            for (const p_id in game.participants) {
+                                const p_stat = game.participants[p_id];
+                                if (String(p_stat.id) === String(trackedPlayerId)) {
+                                    updateCell(`item-${itemId}-game-${game.game_id}-kda`, `${p_stat.kills}/${p_stat.deaths}/${p_stat.assists}`);
+                                    updateCell(`item-${itemId}-game-${game.game_id}-cs`, p_stat.creeps);
+                                }
                             }
                         }
-                    }
-                });
-            } else if (sportName === 'Baseball') {
-                if (trackedTeamId) {
-                    if (matchData.away_team && matchData.away_team.id == trackedTeamId) {
-                        highlightElement(document.getElementById(`mlb-match-${matchId}-team-${matchData.away_team.id}-box`));
-                    }
-                    if (matchData.home_team && matchData.home_team.id == trackedTeamId) {
-                        highlightElement(document.getElementById(`mlb-match-${matchId}-team-${matchData.home_team.id}-box`));
-                    }
-                    for (const playerId in matchData.away_team.players) {
-                        updateCell(`mlb-match-${matchId}-player-${playerId}-summary`, matchData.away_team.players[playerId].summary);
-                    }
-                    for (const playerId in matchData.home_team.players) {
-                        updateCell(`mlb-match-${matchId}-player-${playerId}-summary`, matchData.home_team.players[playerId].summary);
-                    }
-                } else if (trackedPlayerId) {
-                    const allPlayers = { ...matchData.away_team.players, ...matchData.home_team.players };
-                    if (allPlayers[trackedPlayerId]) {
-                        updateCell(`item-${itemId}-summary`, allPlayers[trackedPlayerId].summary);
+                    });
+                } else if (sportName === 'Baseball') {
+                    if (trackedTeamId) {
+                        if (matchData.away_team) {
+                            if (String(matchData.away_team.id) === String(trackedTeamId)) {
+                                highlightElement(document.getElementById(`item-${itemId}-mlb-match-${matchId}-team-${matchData.away_team.id}-box`));
+                            }
+                            for (const playerId in matchData.away_team.players) {
+                                updateCell(`item-${itemId}-mlb-match-${matchId}-player-${playerId}-summary`, matchData.away_team.players[playerId].summary);
+                            }
+                        }
+                        if (matchData.home_team) {
+                            if (String(matchData.home_team.id) === String(trackedTeamId)) {
+                                highlightElement(document.getElementById(`item-${itemId}-mlb-match-${matchId}-team-${matchData.home_team.id}-box`));
+                            }
+                            for (const playerId in matchData.home_team.players) {
+                                updateCell(`item-${itemId}-mlb-match-${matchId}-player-${playerId}-summary`, matchData.home_team.players[playerId].summary);
+                            }
+                        }
+                    } else if (trackedPlayerId) {
+                        const allPlayers = { ...matchData.away_team.players, ...matchData.home_team.players };
+                        if (allPlayers[trackedPlayerId]) {
+                            updateCell(`item-${itemId}-summary`, allPlayers[trackedPlayerId].summary);
+                        }
                     }
                 }
-            }
+            });
         };
 
         eventSource.onerror = function(err) {

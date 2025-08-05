@@ -170,20 +170,21 @@ def untrack_team(team_id, event_id):
 @current_app.route('/untrack_item/<int:item_id>', methods=['POST'])
 @login_required
 def untrack_item(item_id):
-    form = EmptyForm()
-    if form.validate_on_submit():
+    try:
         item = UserTrackedItem.query.filter_by(id=item_id, user_id=current_user.id).first_or_404()
         if item.event:
             if item.event.state == 'completed':
                 cache.delete(f"completed_match:{item.event.match_id}")
             else:
                 cache.delete(f"match_state:{item.event.match_id}")
-
         db.session.delete(item)
         db.session.commit()
-        return jsonify({'status': 'success'})
-    return jsonify({'status': 'error'}), 400
 
+        return jsonify({'status': 'success', 'message': 'Item untracked.'})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error untracking item {item_id}: {e}")
+        return jsonify({'status': 'error', 'message': 'An internal error occurred.'}), 500
 
 @current_app.route('/track_player/<int:player_id>/in_event/<int:event_id>', methods=['POST'])
 @login_required

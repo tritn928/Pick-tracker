@@ -25,7 +25,7 @@ services:
       - redis
       - db
       - web
-    command: [ "celery", "-A", "app.celery_app.celery", "beat", "-l", "info" ]
+    command: [ "celery", "-A", "run_celery.celery", "beat", "-l", "info" ]
 
   worker:
     build: .

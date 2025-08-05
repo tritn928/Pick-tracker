@@ -20,7 +20,6 @@ class UserTrackedItem(db.Model):
     # Can track a team OR a player within an event. One will be null.
     canonical_team_id = db.Column(db.Integer, db.ForeignKey('canonical_teams.id'), nullable=True)
     canonical_player_id = db.Column(db.Integer, db.ForeignKey('canonical_players.id'), nullable=True)
-
     tracked_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Define relationships to easily access the objects
