@@ -896,7 +896,7 @@ def store_final_lol_results_in_db(final_match_object, event: Event):
                     if not match_player_for_stats:
                         # If the current Game player is not a MatchPlayer
                         target_match_team_for_sub = None
-                        for mt_in_match in final_match_object.match_teams:
+                        for mt_in_match in event.match.match_teams:
                             # Iterate over MatchTeams already created for this match
                             # Look for the id that is associated with this MatchTeam
                             if mt_in_match.canonical_team_id == canonical_team_for_game.id or \
